@@ -55,6 +55,7 @@
               "scripts/overview",
               "scripts/install-deps",
               "scripts/launch-browser",
+              "scripts/stop-browser",
               "scripts/browser-connect"
             ]
           },

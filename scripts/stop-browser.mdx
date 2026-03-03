@@ -1,0 +1,105 @@
+---
+title: stop-browser.sh
+description: Stop all browser automation processes and clean up
+---
+
+# stop-browser.sh
+
+The `stop-browser.sh` script stops all browser automation processes launched by `launch-browser.sh` and cleans up temporary files.
+
+## What it does
+
+The script performs a graceful shutdown of the entire browser automation stack:
+
+1. **Stops all processes** in reverse order (tunnel → VNC → browser → display)
+2. **Graceful shutdown** with 5-second timeout before force-kill
+3. **Cleans up** PID files, Chrome profile, and logs
+4. **Removes** the `/tmp/browser-automation` directory
+
+## Usage
+
+```bash
+bash scripts/stop-browser.sh
+```
+
+No arguments required — it automatically finds and stops all running browser automation processes.
+
+## Shutdown Order
+
+Processes are stopped in reverse order to ensure clean shutdown:
+
+<Steps>
+  <Step title="cloudflared (tunnel)">
+    Stops the Cloudflare tunnel first to prevent new connections
+  </Step>
+  <Step title="websockify (noVNC)">
+    Stops the WebSocket proxy for the noVNC client
+  </Step>
+  <Step title="x11vnc (VNC server)">
+    Stops the VNC server sharing the display
+  </Step>
+  <Step title="chrome (browser)">
+    Stops the Chromium browser process
+  </Step>
+  <Step title="Xvfb (display)">
+    Stops the virtual X server last
+  </Step>
+</Steps>
+
+## Example Output
+
+```
+Stopping browser automation stack...
+  Stopping cloudflared (PID 12345)...
+  Stopping websockify (PID 12344)...
+  Stopping x11vnc (PID 12343)...
+  Stopping chrome (PID 12342)...
+  Stopping xvfb (PID 12341)...
+All browser automation processes stopped.
+```
+
+## Cleanup Actions
+
+The script removes:
+
+- **PID files**: `/tmp/browser-automation/*.pid`
+- **Chrome profile**: `/tmp/browser-automation/chrome-profile`
+- **Log files**: `/tmp/browser-automation/logs/*`
+- **Work directory**: `/tmp/browser-automation`
+
+<Warning>
+This script removes the temporary Chrome profile used by the VNC stack. Any cookies or sessions will be lost. Use PinchTab profiles for persistent sessions.
+</Warning>
+
+## When to Use
+
+Use `stop-browser.sh` when:
+
+- You're done with a debugging session
+- You need to free up system resources
+- You want to restart the browser stack with different settings
+- You're shutting down the server
+
+<Tip>
+The `launch-browser.sh` script automatically calls `stop-browser.sh` before starting to ensure a clean state.
+</Tip>
+
+## Error Handling
+
+The script handles common issues gracefully:
+
+- **No session found**: Exits cleanly if no browser automation is running
+- **Process already stopped**: Skips processes that are no longer running
+- **Graceful shutdown timeout**: Force-kills processes that don't stop within 5 seconds
+- **Cleanup failures**: Continues even if some files cannot be removed
+
+## Related Scripts
+
+<CardGroup cols={2}>
+  <Card title="launch-browser.sh" icon="play" href="/scripts/launch-browser">
+    Launch the full VNC-based browser stack
+  </Card>
+  <Card title="Scripts Overview" icon="list" href="/scripts/overview">
+    View all available helper scripts
+  </Card>
+</CardGroup>
