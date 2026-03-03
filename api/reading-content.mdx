@@ -1,0 +1,211 @@
+---
+title: "Reading Content"
+description: "Extract text, snapshots, and screenshots from web pages"
+---
+
+# Reading Content API
+
+The Reading Content API provides multiple ways to extract data from web pages, optimized for different use cases.
+
+## Get Readable Text
+
+`GET /text`
+
+Extracts readable text from the current page. **This is the most token-efficient way to read content** and should be your default choice.
+
+### Example Request
+
+```bash
+curl -s http://localhost:9868/text
+```
+
+### Response
+
+```json
+{
+  "text": "This is the main content of the page. It includes all readable text extracted from the DOM, cleaned and formatted for consumption.",
+  "title": "Page Title",
+  "url": "https://example.com/page"
+}
+```
+
+### Response Fields
+
+<ResponseField name="text" type="string">
+  Extracted readable text from the page, with scripts, styles, and navigation elements removed
+</ResponseField>
+
+<ResponseField name="title" type="string">
+  The page's title (from `<title>` tag)
+</ResponseField>
+
+<ResponseField name="url" type="string">
+  The current URL of the page
+</ResponseField>
+
+### Usage Notes
+
+- Returns clean, readable text without HTML markup
+- Automatically removes navigation, ads, and other non-content elements
+- Most token-efficient option for AI agents
+- Use this by default unless you need interactive elements or visual data
+
+### Common Pattern: Read an Article
+
+```bash
+# Navigate to article
+curl -s -X POST http://localhost:9868/navigate \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com/article"}'
+sleep 3
+
+# Extract text
+curl -s http://localhost:9868/text
+```
+
+## Get Element Snapshot
+
+`GET /snapshot`
+
+Returns a structured snapshot of page elements, useful for identifying interactive elements for automation.
+
+### Query Parameters
+
+<ParamField path="filter" type="string">
+  Filter elements by type. Options:
+  - `interactive` — Only interactive elements (buttons, links, inputs)
+  - `all` — All elements (default)
+</ParamField>
+
+<ParamField path="format" type="string">
+  Output format. Options:
+  - `compact` — Minimal JSON (default)
+  - `full` — Complete element details
+</ParamField>
+
+### Example Request: Interactive Elements Only
+
+```bash
+curl -s "http://localhost:9868/snapshot?filter=interactive&format=compact"
+```
+
+### Example Request: Full Snapshot
+
+```bash
+curl -s http://localhost:9868/snapshot
+```
+
+### Response
+
+Returns an array of elements with reference IDs that can be used for interaction:
+
+```json
+[
+  {
+    "ref": "e1",
+    "tag": "button",
+    "text": "Submit",
+    "attrs": {
+      "type": "submit",
+      "class": "btn btn-primary"
+    }
+  },
+  {
+    "ref": "e2",
+    "tag": "input",
+    "attrs": {
+      "type": "text",
+      "name": "username",
+      "placeholder": "Enter username"
+    }
+  },
+  {
+    "ref": "e3",
+    "tag": "a",
+    "text": "Learn More",
+    "attrs": {
+      "href": "/about"
+    }
+  }
+]
+```
+
+### Response Fields
+
+<ResponseField name="ref" type="string">
+  Reference ID for the element (e.g., "e1", "e2"). Use this with the `/action` endpoint to interact with the element.
+</ResponseField>
+
+<ResponseField name="tag" type="string">
+  HTML tag name (e.g., "button", "input", "a")
+</ResponseField>
+
+<ResponseField name="text" type="string">
+  Visible text content of the element
+</ResponseField>
+
+<ResponseField name="attrs" type="object">
+  HTML attributes of the element (class, id, type, href, etc.)
+</ResponseField>
+
+### Usage Notes
+
+- Use `filter=interactive` to reduce token usage when you only need actionable elements
+- Reference IDs (`ref`) are used with the `/action` endpoint for clicking, typing, etc.
+- Snapshots are generated from the current DOM state
+
+## Take a Screenshot
+
+`GET /screenshot`
+
+Captures a PNG screenshot of the current page.
+
+### Example Request
+
+```bash
+curl -s http://localhost:9868/screenshot -o /tmp/page.png
+```
+
+### Response
+
+Returns binary PNG image data.
+
+### Usage Notes
+
+- Returns the full visible viewport
+- Save to a file using `-o` flag
+- Useful for visual verification or debugging
+- Screenshots capture the current scroll position
+
+### Example: Screenshot After Navigation
+
+```bash
+# Navigate to page
+curl -s -X POST http://localhost:9868/navigate \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com"}'
+sleep 2
+
+# Take screenshot
+curl -s http://localhost:9868/screenshot -o /tmp/example.png
+```
+
+## Choosing the Right Endpoint
+
+| Use Case | Endpoint | Why |
+|----------|----------|-----|
+| Read article content | `/text` | Most token-efficient, returns clean text |
+| Find buttons/links to click | `/snapshot?filter=interactive` | Returns actionable elements with refs |
+| Verify visual appearance | `/screenshot` | Returns image for visual inspection |
+| Scrape structured data | `/evaluate` with JavaScript | Most flexible for custom extraction |
+
+## Token Efficiency
+
+For AI agents, token efficiency is critical:
+
+1. **Best**: `/text` — Returns only readable content (~1-5K tokens for most pages)
+2. **Good**: `/snapshot?filter=interactive&format=compact` — Only interactive elements (~500-2K tokens)
+3. **Moderate**: `/snapshot` — Full DOM snapshot (~2-10K tokens)
+4. **Heavy**: `/screenshot` → image analysis — Requires vision model (~large token cost)
+
+Always prefer `/text` unless you need to interact with specific elements or verify visual layout.

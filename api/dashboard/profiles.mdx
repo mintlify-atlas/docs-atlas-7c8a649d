@@ -1,0 +1,102 @@
+---
+title: 'List Profiles'
+description: 'Get all available browser profiles'
+api: 'GET http://localhost:9867/profiles'
+---
+
+## Overview
+
+Returns a list of all browser profiles available on the system. Profiles are stored in `~/.pinchtab/profiles/` and persist across restarts.
+
+## Request
+
+```bash
+curl -s http://localhost:9867/profiles
+```
+
+## Response
+
+Returns an array of profile objects.
+
+<ResponseField name="profiles" type="array">
+  Array of profile objects
+  
+  <Expandable title="Profile Object">
+    <ResponseField name="name" type="string">
+      The profile name (directory name)
+    </ResponseField>
+    
+    <ResponseField name="path" type="string">
+      Full filesystem path to the profile directory
+    </ResponseField>
+    
+    <ResponseField name="size" type="number">
+      Profile directory size in bytes
+    </ResponseField>
+    
+    <ResponseField name="created" type="string">
+      ISO 8601 timestamp of when the profile was created
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Example Response
+
+```json
+[
+  {
+    "name": "default",
+    "path": "/home/user/.pinchtab/profiles/default",
+    "size": 45678912,
+    "created": "2026-02-15T10:30:00Z"
+  },
+  {
+    "name": "twitter-bot",
+    "path": "/home/user/.pinchtab/profiles/twitter-bot",
+    "size": 23456789,
+    "created": "2026-03-01T14:22:00Z"
+  }
+]
+```
+
+## Use Cases
+
+**Check if a profile exists before launching**
+```bash
+# Get all profiles
+PROFILES=$(curl -s http://localhost:9867/profiles)
+
+# Check if 'my-profile' exists
+if echo "$PROFILES" | grep -q '"my-profile"'; then
+  echo "Profile exists"
+else
+  echo "Profile will be created on first launch"
+fi
+```
+
+**List all profiles with their sizes**
+```bash
+curl -s http://localhost:9867/profiles | jq -r '.[] | "\(.name): \(.size) bytes"'
+```
+
+## Profile Creation
+
+Profiles are created automatically when you launch an instance with a new profile name. You don't need to create them manually.
+
+```bash
+# This will create 'new-profile' if it doesn't exist
+curl -s -X POST http://localhost:9867/instances/launch \
+  -H "Content-Type: application/json" \
+  -d '{"name":"new-profile","port":"9868","headless":false}'
+```
+
+## Profile Contents
+
+Each profile directory contains:
+- **Cookies** - Persistent login sessions
+- **Local Storage** - Website data
+- **Cache** - Cached resources
+- **History** - Browsing history
+- **Preferences** - Chrome settings
+
+This means once a user logs into a website (like Twitter, LinkedIn, etc.), that session persists even after stopping and restarting the instance.

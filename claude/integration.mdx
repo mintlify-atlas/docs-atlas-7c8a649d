@@ -1,0 +1,142 @@
+---
+title: Claude Code Integration
+description: How to use PinchTab as a Claude Code skill for browser automation
+---
+
+## Overview
+
+PinchTab can be integrated into Claude Code as a custom skill, giving Claude the ability to:
+
+- Browse the web and extract data from any website
+- Access authenticated pages using cookie-based session persistence
+- Scrape social media feeds, dashboards, and other dynamic content
+- Interact with web pages (click, type, scroll)
+- Take screenshots and extract readable text
+
+This integration uses PinchTab's HTTP API, which provides a token-efficient way to control Chrome through the DevTools Protocol.
+
+## Installation
+
+<Steps>
+  <Step title="Install PinchTab">
+    Download and install PinchTab from [pinchtab.com](https://pinchtab.com).
+  </Step>
+
+  <Step title="Install Chrome and Xvfb">
+    Install Google Chrome and Xvfb (virtual display for headless servers):
+
+    ```bash
+    # Install Google Chrome
+    wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+    echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+    sudo apt-get update && sudo apt-get install -y google-chrome-stable xvfb
+    ```
+  </Step>
+
+  <Step title="Create Chrome wrapper">
+    Create a Chrome wrapper script that adds `--no-sandbox` for server environments:
+
+    ```bash
+    mkdir -p ~/.pinchtab
+    cat > ~/.pinchtab/chrome-wrapper.sh << 'EOF'
+#!/bin/bash
+exec /usr/bin/google-chrome-stable --no-sandbox "$@"
+EOF
+    chmod +x ~/.pinchtab/chrome-wrapper.sh
+    ```
+  </Step>
+
+  <Step title="Add skill to Claude Code">
+    Copy the skill file to your Claude Code project's skills directory:
+
+    ```bash
+    mkdir -p .claude/skills
+    cp SKILL.md .claude/skills/browser-automation.md
+    ```
+
+    Claude will now have access to browser automation capabilities through PinchTab.
+  </Step>
+</Steps>
+
+## Capabilities
+
+Once integrated, Claude can:
+
+### Read Web Pages
+
+- Extract readable text from any webpage (most token-efficient method)
+- Get interactive element snapshots for automation
+- Take screenshots
+- Execute JavaScript to extract custom data
+
+### Handle Authentication
+
+- Import cookies from the user's browser using the Cookie-Editor extension
+- Maintain persistent sessions across restarts
+- Access authenticated social media feeds, dashboards, and private content
+
+### Automate Interactions
+
+- Navigate to URLs
+- Click elements
+- Type into form fields
+- Scroll pages
+- Manage multiple browser tabs
+
+### Manage Browser Profiles
+
+- Run multiple isolated browser profiles simultaneously
+- Each profile maintains its own cookies and session data
+- Profiles persist across PinchTab restarts
+
+## Architecture
+
+The integration consists of:
+
+- **PinchTab** (`/usr/local/bin/pinchtab`) - 12MB Go binary that wraps Chrome DevTools Protocol into an HTTP API
+- **Google Chrome** (`/usr/bin/google-chrome-stable`) - The browser engine
+- **Xvfb** - Virtual display for running Chrome in headed mode on headless servers
+- **Chrome wrapper** (`~/.pinchtab/chrome-wrapper.sh`) - Adds necessary flags for server environments
+
+PinchTab runs Chrome with persistent profiles. Once a user logs into a site, the session persists across restarts, eliminating the need for repeated authentication.
+
+## Cookie-Based Authentication
+
+Instead of requiring VNC or screen sharing for logins, PinchTab uses a simple cookie import workflow:
+
+1. User installs the [Cookie-Editor Chrome extension](https://chromewebstore.google.com/detail/hlkenndednhfkekhgcdicdfddnkalmdm) (free, open-source, 700K+ users)
+2. User navigates to the target website in their personal browser (logged in)
+3. User clicks the Cookie-Editor icon and exports cookies as JSON
+4. User provides the JSON to Claude
+5. Claude imports the cookies into PinchTab
+6. Session persists until cookies expire (typically weeks to months)
+
+This approach is secure, doesn't require password sharing, and cookies are stored in the persistent Chrome profile.
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="Token Efficient" icon="gauge-high">
+    Get exactly the data you ask for with endpoints like `/text` that return only readable content
+  </Card>
+  <Card title="Session Persistence" icon="database">
+    Cookies and sessions persist across restarts - authenticate once, use indefinitely
+  </Card>
+  <Card title="Multiple Profiles" icon="users">
+    Run multiple isolated browser profiles on different ports for parallel operations
+  </Card>
+  <Card title="Full Control" icon="code">
+    Execute arbitrary JavaScript, interact with elements, and automate complex workflows
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Common Workflows" icon="list-check" href="/claude/workflows">
+    Learn common patterns for using PinchTab with Claude Code
+  </Card>
+  <Card title="API Reference" icon="book" href="/api">
+    Explore the complete PinchTab HTTP API
+  </Card>
+</CardGroup>

@@ -1,0 +1,327 @@
+---
+title: "Cookies"
+description: "Import and export cookies for authentication"
+---
+
+# Cookies API
+
+The Cookies API allows you to import and export cookies, enabling authentication without requiring the user to log in through VNC or screen sharing.
+
+## Get Cookies
+
+`GET /cookies`
+
+Retrieves all cookies for a specified URL.
+
+### Query Parameters
+
+<ParamField path="url" type="string" required>
+  The URL to get cookies for (e.g., "https://x.com")
+</ParamField>
+
+### Example Request
+
+```bash
+curl -s "http://localhost:9868/cookies?url=https://x.com"
+```
+
+### Response
+
+Returns an array of cookie objects:
+
+```json
+[
+  {
+    "name": "auth_token",
+    "value": "abc123...",
+    "domain": ".x.com",
+    "path": "/",
+    "secure": true,
+    "httpOnly": true,
+    "sameSite": "None",
+    "expires": 1786701753
+  },
+  {
+    "name": "ct0",
+    "value": "def456...",
+    "domain": ".x.com",
+    "path": "/",
+    "secure": true,
+    "httpOnly": false,
+    "sameSite": "Lax",
+    "expires": 1786701754
+  }
+]
+```
+
+### Response Fields
+
+<ResponseField name="name" type="string">
+  Cookie name
+</ResponseField>
+
+<ResponseField name="value" type="string">
+  Cookie value
+</ResponseField>
+
+<ResponseField name="domain" type="string">
+  Domain the cookie applies to (e.g., ".x.com")
+</ResponseField>
+
+<ResponseField name="path" type="string">
+  URL path the cookie applies to (e.g., "/")
+</ResponseField>
+
+<ResponseField name="secure" type="boolean">
+  Whether the cookie requires HTTPS
+</ResponseField>
+
+<ResponseField name="httpOnly" type="boolean">
+  Whether the cookie is inaccessible to JavaScript
+</ResponseField>
+
+<ResponseField name="sameSite" type="string">
+  SameSite attribute. Options: "None", "Lax", "Strict"
+</ResponseField>
+
+<ResponseField name="expires" type="number">
+  Unix timestamp when the cookie expires
+</ResponseField>
+
+## Import Cookies
+
+`POST /cookies`
+
+Imports cookies for authentication. This is the primary method for logging into websites without VNC.
+
+### Request Body
+
+<ParamField path="url" type="string" required>
+  The URL to set cookies for (must match cookie domains)
+</ParamField>
+
+<ParamField path="cookies" type="array" required>
+  Array of cookie objects to import
+</ParamField>
+
+### Cookie Object Fields
+
+<ParamField path="name" type="string" required>
+  Cookie name
+</ParamField>
+
+<ParamField path="value" type="string" required>
+  Cookie value
+</ParamField>
+
+<ParamField path="domain" type="string" required>
+  Domain the cookie applies to (e.g., ".x.com")
+</ParamField>
+
+<ParamField path="path" type="string">
+  URL path (default: "/")
+</ParamField>
+
+<ParamField path="secure" type="boolean">
+  Requires HTTPS (default: false)
+</ParamField>
+
+<ParamField path="httpOnly" type="boolean">
+  Inaccessible to JavaScript (default: false)
+</ParamField>
+
+<ParamField path="sameSite" type="string">
+  SameSite attribute: "None", "Lax", or "Strict" (default: "Lax")
+</ParamField>
+
+<ParamField path="expires" type="number">
+  Unix timestamp expiration (optional)
+</ParamField>
+
+### Example Request
+
+```bash
+# Navigate to the domain first
+curl -s -X POST http://localhost:9868/navigate \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://x.com"}'
+
+# Then inject cookies
+curl -s -X POST http://localhost:9868/cookies \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://x.com",
+    "cookies": [
+      {
+        "name": "auth_token",
+        "value": "abc123...",
+        "domain": ".x.com",
+        "path": "/",
+        "secure": true,
+        "httpOnly": true,
+        "sameSite": "None",
+        "expires": 1786701753
+      },
+      {
+        "name": "ct0",
+        "value": "def456...",
+        "domain": ".x.com",
+        "path": "/",
+        "secure": true,
+        "httpOnly": false,
+        "sameSite": "Lax",
+        "expires": 1786701754
+      }
+    ]
+  }'
+
+# Reload the page — should now be authenticated
+curl -s -X POST http://localhost:9868/navigate \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://x.com/home"}'
+```
+
+### Response
+
+```json
+{
+  "status": "ok"
+}
+```
+
+## Cookie Import Workflow
+
+PinchTab uses a cookie-based authentication workflow that doesn't require VNC or screen sharing.
+
+### User Setup (One Time)
+
+The user installs the **Cookie-Editor** Chrome extension on their personal browser:
+
+**Cookie-Editor**: https://chromewebstore.google.com/detail/hlkenndednhfkekhgcdicdfddnkalmdm
+
+This is a free, open-source extension with 700K+ users that allows exporting cookies as JSON.
+
+### Authentication Flow
+
+1. **User exports cookies from their browser:**
+   - User navigates to the target website (logged in) in their personal browser
+   - User clicks the Cookie-Editor icon in the toolbar
+   - User clicks "Export" — this copies all cookies as JSON to the clipboard
+   - User sends the JSON to the AI agent
+
+2. **Agent imports cookies into PinchTab:**
+   - Navigate to the domain first (required)
+   - Import the cookies via `POST /cookies`
+   - Navigate to the authenticated page
+
+3. **Session persists:**
+   - Cookies are stored in the Chrome profile directory (`~/.pinchtab/profiles/<name>/`)
+   - Sessions persist across PinchTab restarts
+   - User only needs to export cookies once per site (until session expires)
+
+### Cookie-Editor Format Mapping
+
+Cookie-Editor exports cookies in a slightly different format. Here's the mapping:
+
+| Cookie-Editor | PinchTab | Notes |
+|---------------|----------|-------|
+| `name` | `name` | Same |
+| `value` | `value` | Same |
+| `domain` | `domain` | Same |
+| `path` | `path` | Same |
+| `secure` | `secure` | Same (boolean) |
+| `httpOnly` | `httpOnly` | Same (boolean) |
+| `expirationDate` | `expires` | Rename (both are Unix timestamp) |
+| `sameSite` | `sameSite` | Capitalize: `"no_restriction"` → `"None"`, `"lax"` → `"Lax"`, `"strict"` → `"Strict"` |
+| `hostOnly` | — | Ignore |
+| `storeId` | — | Ignore |
+| `session` | — | Ignore |
+| `id` | — | Ignore |
+
+### Example Transformation
+
+Cookie-Editor format:
+```json
+{
+  "name": "auth_token",
+  "value": "abc123",
+  "domain": ".x.com",
+  "path": "/",
+  "secure": true,
+  "httpOnly": true,
+  "sameSite": "no_restriction",
+  "expirationDate": 1786701753,
+  "hostOnly": false,
+  "session": false,
+  "storeId": "0",
+  "id": 1
+}
+```
+
+PinchTab format:
+```json
+{
+  "name": "auth_token",
+  "value": "abc123",
+  "domain": ".x.com",
+  "path": "/",
+  "secure": true,
+  "httpOnly": true,
+  "sameSite": "None",
+  "expires": 1786701753
+}
+```
+
+## Check Session Validity
+
+After importing cookies, verify the session is valid:
+
+```bash
+# Navigate to the authenticated page
+curl -s -X POST http://localhost:9868/navigate \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://x.com/home"}'
+sleep 4
+
+# Check if we got the feed or a login page
+TITLE=$(curl -s http://localhost:9868/text | python3 -c "import json,sys; print(json.load(sys.stdin).get('title',''))")
+
+if echo "$TITLE" | grep -qi "log in\|sign in\|join"; then
+    echo "Session expired — need fresh cookies from user"
+else
+    echo "Session valid — authenticated"
+fi
+```
+
+## Cookie Persistence
+
+Cookies are stored in the Chrome profile directory and persist across restarts:
+
+- **Profile location**: `~/.pinchtab/profiles/<profile-name>/`
+- **Persistence**: Cookies survive PinchTab restarts
+- **Session lifetime**: Typically weeks to months (depends on the website)
+- **Re-authentication**: Only needed when sessions expire
+
+## Security Notes
+
+- **Never store cookie JSON in plain text** — it contains authentication tokens
+- **Import cookies and discard the JSON** — don't keep it in logs or files
+- **Cookies are stored in the profile directory** — secure the server appropriately
+- **Sessions can be revoked** — users can log out from the website to invalidate cookies
+
+## Common Issues
+
+### Cookies Not Working
+
+1. **Navigate to the domain first** — Cookies must be set after navigating to the domain
+2. **Check domain format** — Use `.example.com` (with leading dot) for subdomain cookies
+3. **Verify secure flag** — `secure: true` requires HTTPS URLs
+4. **Check expiration** — Cookies with past expiration dates are ignored
+
+### Session Expired
+
+If the session expires, the user needs to export fresh cookies:
+
+1. Navigate to an authenticated page
+2. Check if you get a login screen (via `/text` and checking title)
+3. If expired, request fresh cookies from the user

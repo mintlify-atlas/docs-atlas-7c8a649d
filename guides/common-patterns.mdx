@@ -1,0 +1,130 @@
+---
+title: Common Patterns
+description: Overview of common usage patterns for PinchTab browser automation
+---
+
+This guide covers the most common patterns when using PinchTab for browser automation tasks.
+
+## Reading Web Pages
+
+The simplest pattern is navigating to a page and extracting its text content:
+
+```bash
+# Navigate
+curl -s -X POST http://localhost:9868/navigate \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com/article"}'
+sleep 3
+
+# Extract text
+curl -s http://localhost:9868/text
+```
+
+<Tip>
+Use `/text` by default — it's the most token-efficient way to read pages. You get exactly the readable content without HTML markup.
+</Tip>
+
+## Taking Screenshots
+
+Capture a visual snapshot of the current page:
+
+```bash
+curl -s http://localhost:9868/screenshot -o /tmp/page.png
+```
+
+See the [Screenshots guide](/guides/screenshots) for more details.
+
+## Scraping Social Media Feeds
+
+For dynamic content that requires scrolling and JavaScript execution, use the evaluate endpoint:
+
+```python
+import json, time, urllib.request
+
+BASE = "http://localhost:9868"
+
+def post(path, data):
+    req = urllib.request.Request(f"{BASE}{path}")
+    req.add_header("Content-Type", "application/json")
+    req.method = "POST"
+    req.data = json.dumps(data).encode()
+    with urllib.request.urlopen(req, timeout=15) as r:
+        return json.loads(r.read())
+
+def get_json(path):
+    with urllib.request.urlopen(f"{BASE}{path}", timeout=15) as r:
+        return json.loads(r.read())
+
+# Navigate to feed
+post("/navigate", {"url": "https://x.com/home"})
+time.sleep(5)
+
+# Scroll and collect tweets
+all_tweets = {}
+for i in range(30):
+    result = post("/evaluate", {
+        "expression": """JSON.stringify(Array.from(document.querySelectorAll('article')).map(a => {
+            let timeEl = a.querySelector('time');
+            return {
+                raw: a.innerText.substring(0, 800),
+                datetime: timeEl ? timeEl.getAttribute('datetime') : '',
+                link: timeEl && timeEl.closest('a') ? timeEl.closest('a').href : ''
+            };
+        }))"""
+    })
+    articles = json.loads(result.get("result", "[]"))
+    for a in articles:
+        key = a.get("raw", "")[:150]
+        if key and key not in all_tweets:
+            all_tweets[key] = a
+
+    if len(all_tweets) >= 100:
+        break
+
+    post("/evaluate", {"expression": "window.scrollBy(0, 1500)"})
+    time.sleep(2)
+
+tweets = list(all_tweets.values())
+```
+
+See the [Scraping Feeds guide](/guides/scraping-feeds) for a detailed walkthrough.
+
+## Session Validation
+
+Before scraping authenticated content, verify the session is still valid:
+
+```bash
+# Navigate to the authenticated page
+curl -s -X POST http://localhost:9868/navigate \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://x.com/home"}'
+sleep 4
+
+# Check if we got the feed or a login page
+TITLE=$(curl -s http://localhost:9868/text | python3 -c "import json,sys; print(json.load(sys.stdin).get('title',''))")
+
+if echo "$TITLE" | grep -qi "log in\|sign in\|join"; then
+    echo "Session expired — need fresh cookies from user"
+else
+    echo "Session valid — authenticated"
+fi
+```
+
+Learn more in the [Session Validation guide](/guides/session-validation).
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use /text for reading" icon="file-lines">
+    Most token-efficient endpoint for extracting page content
+  </Card>
+  <Card title="Check sessions first" icon="shield-check">
+    Validate authentication before starting scraping tasks
+  </Card>
+  <Card title="Use /evaluate for JS" icon="code">
+    Run custom JavaScript with the `/evaluate` endpoint (not `/eval`)
+  </Card>
+  <Card title="Scroll with window.scrollBy" icon="arrows-up-down">
+    Use `window.scrollBy(0, pixels)` via evaluate for scrolling
+  </Card>
+</CardGroup>

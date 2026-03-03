@@ -1,0 +1,363 @@
+---
+title: browser-connect.ts
+description: TypeScript CLI for Chrome DevTools Protocol interaction
+---
+
+## Overview
+
+The `browser-connect.ts` script is a TypeScript/Bun CLI tool that connects to a running Chromium instance via Chrome DevTools Protocol (CDP) using puppeteer-core. It provides simple commands for common browser automation tasks.
+
+## Installation
+
+No installation required. The script uses Bun and puppeteer-core:
+
+```bash
+bun install puppeteer-core
+```
+
+## Usage
+
+```bash
+bun run scripts/browser-connect.ts <action> [args...]
+```
+
+### CDP URL Configuration
+
+By default, the script connects to `http://127.0.0.1:9222`. Override with the `CDP_URL` environment variable:
+
+```bash
+CDP_URL=http://127.0.0.1:9223 bun run scripts/browser-connect.ts status
+```
+
+## Available Actions
+
+### status
+
+Check CDP endpoint and list all open pages.
+
+```bash
+bun run scripts/browser-connect.ts status
+```
+
+**Output:**
+```
+CDP endpoint: http://127.0.0.1:9222
+Browser: Chrome/131.0.6778.85
+Open pages: 2
+  - https://example.com (title: "Example Domain")
+  - about:blank (title: "")
+```
+
+<Tip>
+Use this to verify the browser is running and see what pages are open.
+</Tip>
+
+### screenshot
+
+Take a screenshot of the current page.
+
+```bash
+# Default path: /tmp/browser-screenshot.png
+bun run scripts/browser-connect.ts screenshot
+
+# Custom path
+bun run scripts/browser-connect.ts screenshot /tmp/my-screenshot.png
+```
+
+**Output:**
+```
+Screenshot saved to /tmp/browser-screenshot.png
+```
+
+<Note>
+Screenshots capture the visible viewport only (not full page).
+</Note>
+
+### url
+
+Print the current page URL.
+
+```bash
+bun run scripts/browser-connect.ts url
+```
+
+**Output:**
+```
+https://example.com/page
+```
+
+### cookies
+
+Dump cookies for the current page, optionally filtered by domain.
+
+```bash
+# All cookies
+bun run scripts/browser-connect.ts cookies
+
+# Filter by domain
+bun run scripts/browser-connect.ts cookies twitter.com
+```
+
+**Output:**
+```json
+[
+  {
+    "name": "session_id",
+    "value": "abc123xyz",
+    "domain": ".example.com",
+    "path": "/",
+    "expires": 1735689600,
+    "httpOnly": true,
+    "secure": true,
+    "sameSite": "Lax"
+  }
+]
+```
+
+### navigate
+
+Navigate the current page to a URL.
+
+```bash
+bun run scripts/browser-connect.ts navigate https://google.com
+```
+
+**Output:**
+```
+Navigated to: https://www.google.com/
+```
+
+**Options:**
+- Waits for `domcontentloaded` event
+- Works on the first open page (index 0)
+
+<Warning>
+If no pages are open, this will fail with "No pages open".
+</Warning>
+
+### html
+
+Get HTML content from the page or a specific element.
+
+```bash
+# Full page HTML
+bun run scripts/browser-connect.ts html
+
+# HTML of specific element
+bun run scripts/browser-connect.ts html "div.content"
+```
+
+**Output:**
+```html
+<!DOCTYPE html>
+<html>
+  <head><title>Example</title></head>
+  <body>...</body>
+</html>
+```
+
+With selector:
+```html
+<div class="content">
+  <p>Content here</p>
+</div>
+```
+
+### evaluate
+
+Evaluate a JavaScript expression in the page context.
+
+```bash
+# Get page title
+bun run scripts/browser-connect.ts evaluate "document.title"
+
+# Get element count
+bun run scripts/browser-connect.ts evaluate "document.querySelectorAll('a').length"
+
+# Complex expression
+bun run scripts/browser-connect.ts evaluate "Array.from(document.querySelectorAll('h1')).map(h => h.textContent)"
+```
+
+**Output:**
+
+Strings are returned as-is:
+```
+Example Domain
+```
+
+Objects are JSON-formatted:
+```json
+[
+  "First Heading",
+  "Second Heading"
+]
+```
+
+<Info>
+The expression is evaluated in the browser context, not Node.js. You have access to the full DOM API.
+</Info>
+
+## Examples
+
+### Check if Browser is Running
+
+```bash
+if bun run scripts/browser-connect.ts status &>/dev/null; then
+  echo "Browser is running"
+else
+  echo "Browser is not running"
+fi
+```
+
+### Take Screenshot and Open
+
+```bash
+bun run scripts/browser-connect.ts screenshot /tmp/page.png
+open /tmp/page.png  # macOS
+xdg-open /tmp/page.png  # Linux
+```
+
+### Navigate and Extract Text
+
+```bash
+bun run scripts/browser-connect.ts navigate https://example.com
+sleep 2
+bun run scripts/browser-connect.ts evaluate "document.body.innerText"
+```
+
+### Get All Links
+
+```bash
+bun run scripts/browser-connect.ts evaluate \
+  "Array.from(document.querySelectorAll('a')).map(a => ({text: a.textContent, href: a.href}))"
+```
+
+### Export Cookies to File
+
+```bash
+bun run scripts/browser-connect.ts cookies > /tmp/cookies.json
+```
+
+### Scroll Page
+
+```bash
+# Scroll down 1000px
+bun run scripts/browser-connect.ts evaluate "window.scrollBy(0, 1000)"
+
+# Scroll to bottom
+bun run scripts/browser-connect.ts evaluate "window.scrollTo(0, document.body.scrollHeight)"
+```
+
+### Fill Form
+
+```bash
+# Set input value
+bun run scripts/browser-connect.ts evaluate \
+  "document.querySelector('input[name=q]').value = 'search query'"
+
+# Click submit button
+bun run scripts/browser-connect.ts evaluate \
+  "document.querySelector('button[type=submit]').click()"
+```
+
+## Error Handling
+
+The script exits with code 1 and prints errors to stderr:
+
+```bash
+bun run scripts/browser-connect.ts navigate
+# Error: Usage: bun run browser-connect.ts navigate <url>
+
+bun run scripts/browser-connect.ts screenshot
+# Error: No pages open
+
+bun run scripts/browser-connect.ts html "#nonexistent"
+# Error: Selector not found: #nonexistent
+```
+
+## Implementation Details
+
+### Connection
+
+The script uses puppeteer-core to connect to an existing browser:
+
+```typescript
+const browser = await puppeteer.connect({ 
+  browserURL: CDP_URL 
+});
+const pages = await browser.pages();
+```
+
+Source: `scripts/browser-connect.ts:31`
+
+### Target Page
+
+Most actions operate on the **first page** (`pages[0]`). If multiple tabs are open, only the first is used.
+
+### Disconnection
+
+The script always calls `browser.disconnect()` after completing the action. It does not close the browser.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Error: connect ECONNREFUSED 127.0.0.1:9222">
+    The browser is not running or CDP is not enabled. Launch with:
+    
+    ```bash
+    bash scripts/launch-browser.sh
+    ```
+  </Accordion>
+  
+  <Accordion title="Error: No pages open">
+    The browser has no tabs open. Navigate to a URL first:
+    
+    ```bash
+    # Via launch-browser.sh
+    bash scripts/launch-browser.sh https://example.com
+    
+    # Or open new tab manually via noVNC
+    ```
+  </Accordion>
+  
+  <Accordion title="evaluate returns null or undefined">
+    Check that your expression is valid JavaScript and returns a value:
+    
+    ```bash
+    # Wrong - assignment returns undefined
+    bun run scripts/browser-connect.ts evaluate "x = 5"
+    
+    # Right - expression returns value
+    bun run scripts/browser-connect.ts evaluate "5"
+    ```
+  </Accordion>
+  
+  <Accordion title="Selector not found error">
+    Ensure the element exists before querying:
+    
+    ```bash
+    # Check if element exists
+    bun run scripts/browser-connect.ts evaluate \
+      "!!document.querySelector('#my-element')"
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Integration with launch-browser.sh
+
+```bash
+# Launch browser and extract CDP URL
+OUTPUT=$(bash scripts/launch-browser.sh https://example.com)
+CDP_URL=$(echo "$OUTPUT" | jq -r '.cdp_url')
+export CDP_URL
+
+# Now use browser-connect
+bun run scripts/browser-connect.ts status
+bun run scripts/browser-connect.ts screenshot
+```
+
+## Source Code
+
+Location: `scripts/browser-connect.ts:1`
+
+The script is written in TypeScript and requires the Bun runtime.

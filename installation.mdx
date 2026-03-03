@@ -1,0 +1,187 @@
+---
+title: Installation
+description: Install PinchTab, Chrome, and dependencies for browser automation on your server
+---
+
+# Installation
+
+This guide walks you through installing PinchTab and all required dependencies for browser automation on a Linux server.
+
+## Prerequisites
+
+- Linux server (Ubuntu/Debian recommended)
+- `sudo` access for installing system packages
+- Internet connection for downloading packages
+
+## Installation steps
+
+<Steps>
+  <Step title="Install PinchTab binary">
+    Download and install PinchTab from [pinchtab.com](https://pinchtab.com):
+
+    ```bash
+    # Visit pinchtab.com and follow the installation instructions
+    # The binary will be installed to /usr/local/bin/pinchtab
+    ```
+
+    <Info>
+    PinchTab is a 12MB Go binary with no external dependencies. It wraps the Chrome DevTools Protocol into a simple HTTP API.
+    </Info>
+
+    Verify the installation:
+
+    ```bash
+    pinchtab --version
+    ```
+  </Step>
+
+  <Step title="Install Google Chrome">
+    Install Google Chrome Stable via apt:
+
+    ```bash
+    # Add Google's signing key
+    wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+
+    # Add Chrome repository
+    echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | \
+      sudo tee /etc/apt/sources.list.d/google-chrome.list
+
+    # Update and install
+    sudo apt-get update && sudo apt-get install -y google-chrome-stable
+    ```
+
+    Verify the installation:
+
+    ```bash
+    google-chrome-stable --version
+    ```
+  </Step>
+
+  <Step title="Install Xvfb">
+    Install Xvfb (X Virtual Framebuffer) for headed mode on a headless server:
+
+    ```bash
+    sudo apt-get update && sudo apt-get install -y xvfb
+    ```
+
+    <Info>
+    Xvfb provides a virtual display so Chrome can run in headed mode (with UI rendering) even on servers without a physical display. This is important for sites that detect headless browsers.
+    </Info>
+
+    Verify the installation:
+
+    ```bash
+    Xvfb -help
+    ```
+  </Step>
+
+  <Step title="Create Chrome wrapper script">
+    Create a wrapper script that adds `--no-sandbox` flag for Chrome on servers:
+
+    ```bash
+    mkdir -p ~/.pinchtab
+    cat > ~/.pinchtab/chrome-wrapper.sh << 'EOF'
+    #!/bin/bash
+    exec /usr/bin/google-chrome-stable --no-sandbox "$@"
+    EOF
+    chmod +x ~/.pinchtab/chrome-wrapper.sh
+    ```
+
+    <Warning>
+    The `--no-sandbox` flag is required when running Chrome on servers without a display. This is a common requirement for Docker containers and cloud instances.
+    </Warning>
+  </Step>
+</Steps>
+
+## Verify installation
+
+Test that all components are installed correctly:
+
+```bash
+# Check PinchTab
+pinchtab --version
+
+# Check Chrome
+google-chrome-stable --version
+
+# Check Xvfb
+which Xvfb
+
+# Check wrapper script
+ls -la ~/.pinchtab/chrome-wrapper.sh
+```
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Launch PinchTab and make your first API call
+  </Card>
+  <Card title="Architecture" icon="diagram-project" href="/concepts/architecture">
+    Learn how PinchTab components work together
+  </Card>
+</CardGroup>
+
+## Optional: VNC stack for visual access
+
+If you need visual access to the browser via a web interface, you can install the VNC stack:
+
+<Accordion title="Install VNC dependencies">
+  The `scripts/install-deps.sh` script installs additional dependencies for VNC-based browser access:
+
+  ```bash
+  # From the PinchTab Skill repository
+  bash scripts/install-deps.sh
+  ```
+
+  This installs:
+  - **x11vnc** — VNC server for sharing the Xvfb display
+  - **novnc** — Web-based VNC client (includes websockify)
+  - **Playwright Chromium** — Alternative browser with system dependencies
+
+  <Note>
+  The VNC stack is optional. Most AI agents don't need visual access and can use the HTTP API directly.
+  </Note>
+</Accordion>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Chrome fails to start with 'cannot open display'">
+    Ensure Xvfb is running before launching PinchTab:
+
+    ```bash
+    pgrep Xvfb || (Xvfb :99 -screen 0 1920x1080x24 &>/dev/null &)
+    export DISPLAY=:99
+    ```
+  </Accordion>
+
+  <Accordion title="Permission denied when running Chrome">
+    Make sure the Chrome wrapper script is executable:
+
+    ```bash
+    chmod +x ~/.pinchtab/chrome-wrapper.sh
+    ```
+
+    And that you're using the wrapper when launching PinchTab:
+
+    ```bash
+    CHROME_BINARY=~/.pinchtab/chrome-wrapper.sh pinchtab
+    ```
+  </Accordion>
+
+  <Accordion title="PinchTab binary not found">
+    Ensure `/usr/local/bin` is in your PATH:
+
+    ```bash
+    echo $PATH | grep /usr/local/bin
+    ```
+
+    If not, add it to your shell profile:
+
+    ```bash
+    echo 'export PATH="/usr/local/bin:$PATH"' >> ~/.bashrc
+    source ~/.bashrc
+    ```
+  </Accordion>
+</AccordionGroup>

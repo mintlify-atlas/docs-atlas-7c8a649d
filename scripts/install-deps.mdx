@@ -1,0 +1,138 @@
+---
+title: install-deps.sh
+description: Install system dependencies for VNC-based browser automation
+---
+
+## Overview
+
+The `install-deps.sh` script installs all required system dependencies for running the VNC-based browser automation stack. This includes the virtual display server, VNC components, and Playwright's Chromium browser.
+
+## What It Installs
+
+### System Packages (via apt)
+
+- **x11vnc** - VNC server for X11 displays
+- **novnc** - Web-based VNC client (includes websockify)
+
+### Playwright Dependencies
+
+- **Chromium browser** - Playwright's bundled Chromium
+- **System libraries** - Required dependencies (libatk, libcups, etc.)
+
+## Usage
+
+```bash
+bash scripts/install-deps.sh
+```
+
+No arguments required. The script will:
+1. Update apt package lists
+2. Install x11vnc and novnc
+3. Install Playwright's Chromium and its dependencies
+4. Verify all required binaries are available
+
+## Verification Checks
+
+The script automatically verifies the following:
+
+<Steps>
+  <Step title="System Binaries">
+    Checks for `Xvfb`, `x11vnc`, `websockify`, and `cloudflared`
+  </Step>
+  <Step title="Playwright Chromium">
+    Locates the Chromium binary in `~/.cache/ms-playwright/`
+  </Step>
+  <Step title="noVNC Files">
+    Verifies web files exist at `/usr/share/novnc/`
+  </Step>
+</Steps>
+
+## Example Output
+
+```
+=== Browser Automation: Installing dependencies ===
+Reading package lists...
+Installing x11vnc novnc...
+Installing Playwright Chromium dependencies...
+
+=== Verifying binaries ===
+  ✓ Xvfb found: /usr/bin/Xvfb
+  ✓ x11vnc found: /usr/bin/x11vnc
+  ✓ websockify found: /usr/bin/websockify
+  ✓ cloudflared found: /usr/local/bin/cloudflared
+  ✓ Playwright Chromium: /home/user/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome
+  ✓ noVNC web files: /usr/share/novnc/
+
+=== All dependencies verified ✓ ===
+```
+
+## Prerequisites
+
+<Warning>
+  This script requires `sudo` privileges for installing system packages via apt.
+</Warning>
+
+Before running:
+
+1. **Bun runtime** - For running `bunx playwright install-deps`
+2. **Internet connection** - For downloading packages
+3. **Cloudflared** - Must be pre-installed (not included in script)
+
+### Installing Cloudflared
+
+```bash
+# Download and install cloudflared
+curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+sudo dpkg -i cloudflared.deb
+```
+
+## What Gets Installed Where
+
+| Component | Location | Notes |
+|-----------|----------|-------|
+| x11vnc | `/usr/bin/x11vnc` | VNC server binary |
+| websockify | `/usr/bin/websockify` | WebSocket proxy |
+| noVNC files | `/usr/share/novnc/` | Web client files |
+| Chromium | `~/.cache/ms-playwright/` | Playwright's browser |
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Script fails with 'cloudflared NOT FOUND'">
+    Cloudflared is not installed by this script. Install it manually:
+    
+    ```bash
+    curl -L --output cloudflared.deb https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+    sudo dpkg -i cloudflared.deb
+    ```
+  </Accordion>
+  
+  <Accordion title="Playwright Chromium not found">
+    If the script can't find Chromium, install it manually:
+    
+    ```bash
+    bunx playwright install chromium
+    ```
+  </Accordion>
+  
+  <Accordion title="Permission denied during apt install">
+    The script requires sudo privileges. Run with appropriate permissions:
+    
+    ```bash
+    sudo bash scripts/install-deps.sh
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+After installing dependencies:
+
+1. [Launch the browser stack](/scripts/launch-browser) with `launch-browser.sh`
+2. [Connect to the browser](/scripts/browser-connect) with `browser-connect.ts`
+
+## Source Code
+
+Location: `scripts/install-deps.sh:1`
+
+The script is idempotent and safe to run multiple times.

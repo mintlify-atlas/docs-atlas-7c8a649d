@@ -1,0 +1,349 @@
+---
+title: Authentication
+description: Cookie-based authentication using the Cookie-Editor extension for seamless login without VNC
+---
+
+PinchTab uses cookie-based authentication to access authenticated websites without requiring VNC, screen sharing, or manual login automation. This approach is simple, secure, and works with any website.
+
+## Overview
+
+Instead of automating the login process or requiring screen access, PinchTab imports cookies from the user's personal browser. This provides:
+
+- No need for VNC or screen sharing
+- Works with any authentication method (passwords, 2FA, OAuth, etc.)
+- Preserves existing user sessions
+- Cookies persist across PinchTab restarts
+
+## Cookie-Editor Extension
+
+The Cookie-Editor browser extension is the recommended tool for exporting cookies.
+
+<Card title="Cookie-Editor for Chrome" icon="chrome" href="https://chromewebstore.google.com/detail/hlkenndednhfkekhgcdicdfddnkalmdm">
+  Free, open-source extension with 700K+ users that lets you view and export cookies from any website
+</Card>
+
+<Note>
+Cookie-Editor is available for Chrome, Firefox, and Edge. The extension is open-source and audited by the browser vendors.
+</Note>
+
+## Authentication Workflow
+
+Here's the complete workflow for authenticating to a website:
+
+<Steps>
+  <Step title="User Installs Extension">
+    The user installs Cookie-Editor on their personal browser (Mac, PC, or phone)
+  </Step>
+  
+  <Step title="User Logs In">
+    User navigates to the target website and logs in normally using their preferred method (password, 2FA, etc.)
+  </Step>
+  
+  <Step title="Export Cookies">
+    User clicks the Cookie-Editor icon in their browser toolbar and clicks "Export" to copy all cookies as JSON
+  </Step>
+  
+  <Step title="Send to Agent">
+    User pastes the JSON cookie data to the AI agent or application
+  </Step>
+  
+  <Step title="Import to PinchTab">
+    The agent imports the cookies into PinchTab using the `/cookies` endpoint
+  </Step>
+  
+  <Step title="Session Active">
+    PinchTab can now access the website as the authenticated user
+  </Step>
+</Steps>
+
+## Requesting Cookies from Users
+
+When your AI agent needs to access an authenticated website, use this template message:
+
+<CodeGroup>
+```text Template
+To access [website name] on your behalf, I need your login cookies. Here's what to do:
+
+1. Install the Cookie-Editor extension if you haven't already:
+   https://chromewebstore.google.com/detail/hlkenndednhfkekhgcdicdfddnkalmdm
+
+2. Go to [website URL] in your browser (make sure you're logged in)
+
+3. Click the Cookie-Editor icon in your toolbar
+
+4. Click "Export" (the download icon) — this copies all cookies as JSON
+
+5. Paste the JSON here
+
+That's it! I'll import your session and can then browse [website] as you. Your cookies are stored securely in a persistent Chrome profile.
+```
+
+```text Example for X/Twitter
+To access X (Twitter) on your behalf, I need your login cookies. Here's what to do:
+
+1. Install the Cookie-Editor extension if you haven't already:
+   https://chromewebstore.google.com/detail/hlkenndednhfkekhgcdicdfddnkalmdm
+
+2. Go to https://x.com in your browser (make sure you're logged in)
+
+3. Click the Cookie-Editor icon in your toolbar
+
+4. Click "Export" (the download icon) — this copies all cookies as JSON
+
+5. Paste the JSON here
+
+That's it! I'll import your session and can then browse X as you. Your cookies are stored securely in a persistent Chrome profile.
+```
+</CodeGroup>
+
+## Importing Cookies
+
+Once the user provides the JSON cookie data, import it using the PinchTab API:
+
+<Steps>
+  <Step title="Navigate to Target Domain">
+    First, navigate to the domain where you want to set cookies:
+    
+    ```bash
+    curl -s -X POST http://localhost:9868/navigate \
+      -H "Content-Type: application/json" \
+      -d '{"url":"https://x.com"}'
+    ```
+  </Step>
+  
+  <Step title="Inject Cookies">
+    Send the cookies to the `/cookies` endpoint:
+    
+    ```bash
+    curl -s -X POST http://localhost:9868/cookies \
+      -H "Content-Type: application/json" \
+      -d '{
+        "url": "https://x.com",
+        "cookies": [
+          {
+            "name": "auth_token",
+            "value": "...",
+            "domain": ".x.com",
+            "path": "/",
+            "secure": true,
+            "httpOnly": true,
+            "sameSite": "None",
+            "expires": 1786701753
+          },
+          {
+            "name": "ct0",
+            "value": "...",
+            "domain": ".x.com",
+            "path": "/",
+            "secure": true,
+            "httpOnly": false,
+            "sameSite": "Lax",
+            "expires": 1786701754
+          }
+        ]
+      }'
+    ```
+  </Step>
+  
+  <Step title="Reload the Page">
+    Navigate to an authenticated page to verify the session:
+    
+    ```bash
+    curl -s -X POST http://localhost:9868/navigate \
+      -H "Content-Type: application/json" \
+      -d '{"url":"https://x.com/home"}'
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+Never store cookie JSON in plain text files or logs. Cookies contain authentication tokens that provide full access to the user's account. Import them immediately and discard the raw JSON.
+</Warning>
+
+## Cookie Format Mapping
+
+Cookie-Editor exports cookies in a slightly different format than PinchTab expects. Here's how to map the fields:
+
+<ParamField path="name" type="string">
+  Cookie name — **no change required**
+</ParamField>
+
+<ParamField path="value" type="string">
+  Cookie value — **no change required**
+</ParamField>
+
+<ParamField path="domain" type="string">
+  Cookie domain (e.g., `.x.com`) — **no change required**
+</ParamField>
+
+<ParamField path="path" type="string">
+  Cookie path — **no change required**
+</ParamField>
+
+<ParamField path="secure" type="boolean">
+  HTTPS-only flag — **no change required**
+</ParamField>
+
+<ParamField path="httpOnly" type="boolean">
+  HTTP-only flag — **no change required**
+</ParamField>
+
+<ParamField path="expirationDate" type="number">
+  Rename to `expires` — Unix timestamp, same value
+</ParamField>
+
+<ParamField path="sameSite" type="string">
+  Capitalize the value:
+  - `"no_restriction"` → `"None"`
+  - `"lax"` → `"Lax"`
+  - `"strict"` → `"Strict"`
+</ParamField>
+
+### Fields to Ignore
+
+These fields from Cookie-Editor should be ignored when importing to PinchTab:
+
+- `hostOnly`
+- `storeId`
+- `session`
+- `id`
+
+### Example Transformation
+
+<CodeGroup>
+```json Cookie-Editor Format
+{
+  "name": "auth_token",
+  "value": "abc123",
+  "domain": ".x.com",
+  "path": "/",
+  "secure": true,
+  "httpOnly": true,
+  "sameSite": "no_restriction",
+  "expirationDate": 1786701753,
+  "hostOnly": false,
+  "session": false,
+  "storeId": "0",
+  "id": 1
+}
+```
+
+```json PinchTab Format
+{
+  "name": "auth_token",
+  "value": "abc123",
+  "domain": ".x.com",
+  "path": "/",
+  "secure": true,
+  "httpOnly": true,
+  "sameSite": "None",
+  "expires": 1786701753
+}
+```
+</CodeGroup>
+
+## Cookie Persistence
+
+Cookies are automatically persisted in the Chrome profile directory:
+
+- **Location**: `~/.pinchtab/profiles/<profile-name>/`
+- **Persistence**: Survives PinchTab restarts
+- **Duration**: Until cookies expire (typically weeks to months)
+- **One-time setup**: Users only need to export cookies once per site
+
+<Info>
+Chrome stores cookies in a SQLite database within the profile directory. As long as the profile directory persists, the session remains active.
+</Info>
+
+## Checking Session Validity
+
+Sessions can expire over time. Before starting a task, verify the session is still valid:
+
+```bash
+# Navigate to the authenticated page
+curl -s -X POST http://localhost:9868/navigate \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://x.com/home"}'
+sleep 4
+
+# Check if we got the feed or a login page
+TITLE=$(curl -s http://localhost:9868/text | python3 -c "import json,sys; print(json.load(sys.stdin).get('title',''))")
+
+if echo "$TITLE" | grep -qi "log in\|sign in\|join"; then
+    echo "Session expired — need fresh cookies from user"
+else
+    echo "Session valid — authenticated"
+fi
+```
+
+<Check>
+Always verify session validity before starting long-running tasks to avoid failures mid-execution.
+</Check>
+
+## Session Expiration
+
+When a session expires:
+
+1. The website will redirect to a login page
+2. Page titles will contain phrases like "Log in", "Sign in", or "Join"
+3. The `/text` endpoint will return login page content instead of authenticated content
+
+**What to do:**
+
+- Ask the user to re-export cookies from their browser
+- Import the fresh cookies using the same process
+- Session persistence is restored
+
+<Note>
+Most websites keep sessions active for weeks or months. Users rarely need to re-export cookies unless they log out or the website invalidates sessions.
+</Note>
+
+## Security Considerations
+
+<Warning>
+**Cookie Security Best Practices:**
+
+- Never log cookie values to files or console
+- Import cookies immediately upon receipt
+- Discard raw JSON after import
+- Store cookies only in Chrome profile directories
+- Don't transmit cookies over unencrypted connections
+- Treat cookies as sensitive credentials
+</Warning>
+
+Cookies contain authentication tokens that provide full account access. Handle them with the same care as passwords.
+
+## Retrieving Cookies
+
+You can retrieve current cookies from PinchTab:
+
+```bash
+curl -s "http://localhost:9868/cookies?url=https://x.com"
+```
+
+This is useful for:
+
+- Debugging authentication issues
+- Checking cookie expiration dates
+- Verifying cookies were imported correctly
+
+## Multi-Site Authentication
+
+For automation across multiple websites:
+
+1. Create separate profiles for each site (or use one profile for all)
+2. Import cookies for each domain
+3. Each site's cookies persist independently
+4. Switch between sites by navigating to different URLs
+
+```bash
+# Import cookies for Site A
+curl -s -X POST http://localhost:9868/navigate -H "Content-Type: application/json" -d '{"url":"https://site-a.com"}'
+curl -s -X POST http://localhost:9868/cookies -H "Content-Type: application/json" -d '{"url":"https://site-a.com", "cookies":[...]}'
+
+# Import cookies for Site B
+curl -s -X POST http://localhost:9868/navigate -H "Content-Type: application/json" -d '{"url":"https://site-b.com"}'
+curl -s -X POST http://localhost:9868/cookies -H "Content-Type: application/json" -d '{"url":"https://site-b.com", "cookies":[...]}'
+
+# Both sessions are now active in the same profile
+```

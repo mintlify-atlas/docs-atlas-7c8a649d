@@ -1,0 +1,346 @@
+---
+title: 'Manage Instances'
+description: 'Launch, monitor, and stop browser instances'
+---
+
+## List Running Instances
+
+Get all currently running browser instances.
+
+### Request
+
+```bash GET /instances
+curl -s http://localhost:9867/instances
+```
+
+### Response
+
+Returns an array of running instance objects.
+
+<ResponseField name="instances" type="array">
+  Array of instance objects
+  
+  <Expandable title="Instance Object">
+    <ResponseField name="id" type="string">
+      Unique instance identifier
+    </ResponseField>
+    
+    <ResponseField name="profile" type="string">
+      Profile name being used
+    </ResponseField>
+    
+    <ResponseField name="port" type="string">
+      Port number where the instance API is running
+    </ResponseField>
+    
+    <ResponseField name="headless" type="boolean">
+      Whether the browser is running in headless mode
+    </ResponseField>
+    
+    <ResponseField name="pid" type="number">
+      Process ID of the Chrome instance
+    </ResponseField>
+    
+    <ResponseField name="status" type="string">
+      Current status: "running", "starting", "stopping"
+    </ResponseField>
+    
+    <ResponseField name="started" type="string">
+      ISO 8601 timestamp of when the instance was launched
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Example Response
+
+```json
+[
+  {
+    "id": "inst_abc123",
+    "profile": "default",
+    "port": "9868",
+    "headless": false,
+    "pid": 12345,
+    "status": "running",
+    "started": "2026-03-03T10:15:00Z"
+  },
+  {
+    "id": "inst_def456",
+    "profile": "twitter-bot",
+    "port": "9869",
+    "headless": true,
+    "pid": 12346,
+    "status": "running",
+    "started": "2026-03-03T10:20:00Z"
+  }
+]
+```
+
+---
+
+## Launch Instance
+
+Start a new browser instance with a specific profile.
+
+### Request
+
+```bash POST /instances/launch
+curl -s -X POST http://localhost:9867/instances/launch \
+  -H "Content-Type: application/json" \
+  -d '{"name":"my-profile","port":"9868","headless":false}'
+```
+
+### Parameters
+
+<ParamField body="name" type="string" required>
+  Profile name to use. If the profile doesn't exist, it will be created.
+</ParamField>
+
+<ParamField body="port" type="string" required>
+  Port number where the instance API will run (e.g., "9868", "9869"). Must be unique among running instances.
+</ParamField>
+
+<ParamField body="headless" type="boolean" default={true}>
+  Whether to run Chrome in headless mode. Set to `false` if you need visual debugging or the site detects headless browsers.
+</ParamField>
+
+### Response
+
+<ResponseField name="id" type="string">
+  Unique instance identifier (used for stop/logs endpoints)
+</ResponseField>
+
+<ResponseField name="profile" type="string">
+  Profile name being used
+</ResponseField>
+
+<ResponseField name="port" type="string">
+  Port number where the instance API is accessible
+</ResponseField>
+
+<ResponseField name="url" type="string">
+  Full base URL for the instance API (e.g., "http://localhost:9868")
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Current status: "starting" or "running"
+</ResponseField>
+
+### Example Response
+
+```json
+{
+  "id": "inst_abc123",
+  "profile": "my-profile",
+  "port": "9868",
+  "url": "http://localhost:9868",
+  "status": "starting"
+}
+```
+
+### Example: Launch Multiple Instances
+
+```bash
+# Launch first instance on port 9868
+curl -s -X POST http://localhost:9867/instances/launch \
+  -H "Content-Type: application/json" \
+  -d '{"name":"twitter","port":"9868","headless":false}'
+
+# Launch second instance on port 9869
+curl -s -X POST http://localhost:9867/instances/launch \
+  -H "Content-Type: application/json" \
+  -d '{"name":"linkedin","port":"9869","headless":false}'
+
+# Now you can use both:
+# - http://localhost:9868 for Twitter instance
+# - http://localhost:9869 for LinkedIn instance
+```
+
+---
+
+## Stop Instance
+
+Stop a running browser instance.
+
+### Request
+
+```bash POST /instances/<id>/stop
+curl -s -X POST http://localhost:9867/instances/<id>/stop
+```
+
+Replace `<id>` with the instance ID from the launch response or instances list.
+
+### Parameters
+
+<ParamField path="id" type="string" required>
+  The instance ID to stop
+</ParamField>
+
+### Response
+
+<ResponseField name="id" type="string">
+  The instance ID that was stopped
+</ResponseField>
+
+<ResponseField name="status" type="string">
+  Status: "stopped" or "stopping"
+</ResponseField>
+
+### Example
+
+```bash
+# First, get the instance ID
+INSTANCES=$(curl -s http://localhost:9867/instances)
+ID=$(echo "$INSTANCES" | jq -r '.[0].id')
+
+# Stop the instance
+curl -s -X POST http://localhost:9867/instances/$ID/stop
+```
+
+### Example Response
+
+```json
+{
+  "id": "inst_abc123",
+  "status": "stopped"
+}
+```
+
+### Notes
+
+- Stopping an instance preserves the profile data (cookies, sessions, etc.)
+- You can relaunch the same profile later and sessions will still be active
+- The Chrome process is terminated gracefully
+
+---
+
+## View Instance Logs
+
+Get logs for a specific instance (useful for debugging).
+
+### Request
+
+```bash GET /instances/<id>/logs
+curl -s http://localhost:9867/instances/<id>/logs
+```
+
+Replace `<id>` with the instance ID.
+
+### Parameters
+
+<ParamField path="id" type="string" required>
+  The instance ID
+</ParamField>
+
+<ParamField query="lines" type="number" default={100}>
+  Number of recent log lines to return
+</ParamField>
+
+### Response
+
+<ResponseField name="id" type="string">
+  The instance ID
+</ResponseField>
+
+<ResponseField name="logs" type="string">
+  Log output as a single string (newline-separated)
+</ResponseField>
+
+### Example
+
+```bash
+# Get last 100 lines
+curl -s http://localhost:9867/instances/inst_abc123/logs
+
+# Get last 50 lines
+curl -s "http://localhost:9867/instances/inst_abc123/logs?lines=50"
+```
+
+### Example Response
+
+```json
+{
+  "id": "inst_abc123",
+  "logs": "2026-03-03T10:15:00Z [INFO] Chrome started on port 9868\n2026-03-03T10:15:01Z [INFO] Profile loaded: default\n2026-03-03T10:15:02Z [INFO] Instance ready\n"
+}
+```
+
+### Use Cases
+
+**Debug startup issues**
+```bash
+# Launch instance
+RESP=$(curl -s -X POST http://localhost:9867/instances/launch \
+  -H "Content-Type: application/json" \
+  -d '{"name":"test","port":"9870","headless":false}')
+
+ID=$(echo "$RESP" | jq -r '.id')
+
+# Wait a moment
+sleep 2
+
+# Check logs if instance isn't responding
+curl -s http://localhost:9867/instances/$ID/logs | jq -r '.logs'
+```
+
+**Monitor for errors**
+```bash
+# Check if instance has errors
+LOGS=$(curl -s http://localhost:9867/instances/inst_abc123/logs | jq -r '.logs')
+
+if echo "$LOGS" | grep -qi "error\|failed\|crashed"; then
+  echo "Instance has errors!"
+  echo "$LOGS"
+fi
+```
+
+---
+
+## Complete Workflow Example
+
+Here's a complete example of managing browser instances:
+
+```bash
+# 1. Check available profiles
+echo "Available profiles:"
+curl -s http://localhost:9867/profiles | jq -r '.[].name'
+
+# 2. Launch a new instance
+echo "\nLaunching instance..."
+LAUNCH=$(curl -s -X POST http://localhost:9867/instances/launch \
+  -H "Content-Type: application/json" \
+  -d '{"name":"my-profile","port":"9868","headless":false}')
+
+ID=$(echo "$LAUNCH" | jq -r '.id')
+PORT=$(echo "$LAUNCH" | jq -r '.port')
+
+echo "Instance launched: $ID on port $PORT"
+
+# 3. Wait for instance to be ready
+sleep 3
+
+# 4. Use the instance (navigate to a page)
+curl -s -X POST http://localhost:$PORT/navigate \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com"}'
+
+sleep 2
+
+# 5. Get page content
+echo "\nPage content:"
+curl -s http://localhost:$PORT/text | jq -r '.text' | head -20
+
+# 6. Check instance status
+echo "\nRunning instances:"
+curl -s http://localhost:9867/instances | jq -r '.[] | "\(.profile) on port \(.port)"'
+
+# 7. View logs
+echo "\nInstance logs:"
+curl -s http://localhost:9867/instances/$ID/logs | jq -r '.logs'
+
+# 8. Stop the instance
+echo "\nStopping instance..."
+curl -s -X POST http://localhost:9867/instances/$ID/stop
+
+echo "Done!"
+```

@@ -1,0 +1,177 @@
+---
+title: Session Validation
+description: Check if an authenticated session is still valid before scraping
+---
+
+When working with authenticated websites, sessions can expire. This guide shows how to validate a session before starting automation tasks.
+
+## Why Validate Sessions?
+
+Cookie-based sessions typically last weeks to months, but they can expire due to:
+
+- Time-based expiration
+- Security policies (password changes, suspicious activity)
+- User logout from another device
+
+If you attempt to scrape with an expired session, you'll get login pages instead of actual content.
+
+## Validation Pattern
+
+The approach is simple: navigate to an authenticated page and check if you got the expected content or a login prompt.
+
+```bash
+# Navigate to the authenticated page
+curl -s -X POST http://localhost:9868/navigate \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://x.com/home"}'
+sleep 4
+
+# Check if we got the feed or a login page
+TITLE=$(curl -s http://localhost:9868/text | python3 -c "import json,sys; print(json.load(sys.stdin).get('title',''))")
+
+if echo "$TITLE" | grep -qi "log in\|sign in\|join"; then
+    echo "Session expired — need fresh cookies from user"
+else
+    echo "Session valid — authenticated"
+fi
+```
+
+## How It Works
+
+### Step 1: Navigate to an Authenticated Page
+
+```bash
+curl -s -X POST http://localhost:9868/navigate \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://x.com/home"}'
+sleep 4
+```
+
+Choose a URL that requires authentication. For X/Twitter, `/home` only shows for logged-in users.
+
+### Step 2: Extract the Page Title
+
+```bash
+TITLE=$(curl -s http://localhost:9868/text | python3 -c "import json,sys; print(json.load(sys.stdin).get('title',''))")
+```
+
+The `/text` endpoint returns JSON with `title`, `text`, and `url` fields. We extract just the title.
+
+### Step 3: Check for Login Indicators
+
+```bash
+if echo "$TITLE" | grep -qi "log in\|sign in\|join"; then
+    echo "Session expired — need fresh cookies from user"
+else
+    echo "Session valid — authenticated"
+fi
+```
+
+Login pages typically contain keywords like "Log in", "Sign in", or "Join". If found, the session is invalid.
+
+## Python Version
+
+Here's the same logic in Python:
+
+```python
+import json, time, urllib.request
+
+BASE = "http://localhost:9868"
+
+def post(path, data):
+    req = urllib.request.Request(f"{BASE}{path}")
+    req.add_header("Content-Type", "application/json")
+    req.method = "POST"
+    req.data = json.dumps(data).encode()
+    with urllib.request.urlopen(req, timeout=15) as r:
+        return json.loads(r.read())
+
+def get_json(path):
+    with urllib.request.urlopen(f"{BASE}{path}", timeout=15) as r:
+        return json.loads(r.read())
+
+# Navigate to authenticated page
+post("/navigate", {"url": "https://x.com/home"})
+time.sleep(4)
+
+# Get page title
+data = get_json("/text")
+title = data.get("title", "").lower()
+
+# Check for login keywords
+if any(keyword in title for keyword in ["log in", "sign in", "join"]):
+    print("Session expired — need fresh cookies from user")
+else:
+    print("Session valid — authenticated")
+```
+
+## Platform-Specific Validation
+
+Different platforms have different login indicators:
+
+<AccordionGroup>
+  <Accordion title="X/Twitter">
+    - URL: `https://x.com/home`
+    - Login indicators: "Log in", "Sign up", "Join"
+  </Accordion>
+  
+  <Accordion title="LinkedIn">
+    - URL: `https://www.linkedin.com/feed/`
+    - Login indicators: "Sign in", "Join now"
+  </Accordion>
+  
+  <Accordion title="Facebook">
+    - URL: `https://www.facebook.com/`
+    - Login indicators: "Log in", "Sign up", "Create"
+  </Accordion>
+  
+  <Accordion title="Instagram">
+    - URL: `https://www.instagram.com/`
+    - Login indicators: "Log in", "Sign up"
+  </Accordion>
+</AccordionGroup>
+
+## When to Validate
+
+<CardGroup cols={2}>
+  <Card title="Before scraping tasks" icon="clock">
+    Always validate before starting a long-running scrape
+  </Card>
+  <Card title="After long idle periods" icon="moon">
+    Check if the session is still active after hours of inactivity
+  </Card>
+  <Card title="On unexpected errors" icon="triangle-exclamation">
+    If scraping suddenly fails, validate the session
+  </Card>
+  <Card title="Periodic checks" icon="rotate">
+    For long-running bots, validate periodically (e.g., every hour)
+  </Card>
+</CardGroup>
+
+## Requesting Fresh Cookies
+
+If validation fails, ask the user to export fresh cookies:
+
+<Note>
+To continue accessing [website], your session has expired. Please export fresh cookies:
+
+1. Go to [website URL] in your browser and log in
+2. Click the Cookie-Editor extension icon
+3. Click "Export" to copy cookies as JSON
+4. Paste the JSON here
+
+Your cookies will be securely imported into the browser profile.
+</Note>
+
+See the [Authentication guide](/concepts/authentication) for complete instructions on importing cookies.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Cookie Import" icon="cookie" href="/concepts/authentication">
+    Learn how to import cookies from users
+  </Card>
+  <Card title="Scraping Feeds" icon="rss" href="/guides/scraping-feeds">
+    Apply session validation to feed scraping workflows
+  </Card>
+</CardGroup>

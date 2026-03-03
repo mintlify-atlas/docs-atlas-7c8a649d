@@ -1,0 +1,328 @@
+---
+title: "Interaction"
+description: "Click, type, scroll, and execute JavaScript in the browser"
+---
+
+# Interaction API
+
+The Interaction API allows you to perform actions on web pages and execute JavaScript.
+
+## Perform Actions
+
+`POST /action`
+
+Performs one or more actions on page elements (clicking, typing, etc.).
+
+### Request Body
+
+<ParamField path="actions" type="array" required>
+  Array of action objects to perform sequentially
+</ParamField>
+
+### Action Object Fields
+
+<ParamField path="kind" type="string" required>
+  Type of action. Options:
+  - `click` — Click an element
+  - `type` — Type text into an element
+</ParamField>
+
+<ParamField path="ref" type="string" required>
+  Element reference from `/snapshot` (e.g., "e5")
+</ParamField>
+
+<ParamField path="text" type="string">
+  Text to type (required when `kind` is `type`)
+</ParamField>
+
+### Example: Click a Button
+
+```bash
+curl -s -X POST http://localhost:9868/action \
+  -H "Content-Type: application/json" \
+  -d '{"actions":[{"kind":"click","ref":"e5"}]}'
+```
+
+### Example: Type into an Input Field
+
+```bash
+curl -s -X POST http://localhost:9868/action \
+  -H "Content-Type: application/json" \
+  -d '{"actions":[{"kind":"type","ref":"e3","text":"hello world"}]}'
+```
+
+### Example: Multiple Actions in Sequence
+
+```bash
+# Type username, type password, then click submit
+curl -s -X POST http://localhost:9868/action \
+  -H "Content-Type: application/json" \
+  -d '{
+    "actions": [
+      {"kind":"type","ref":"e1","text":"myusername"},
+      {"kind":"type","ref":"e2","text":"mypassword"},
+      {"kind":"click","ref":"e3"}
+    ]
+  }'
+```
+
+### Response
+
+```json
+{
+  "status": "ok"
+}
+```
+
+### Usage Notes
+
+- Element references (`ref`) come from the `/snapshot` endpoint
+- Actions are performed sequentially in the order provided
+- Wait a moment after actions for page updates before reading content
+- Typing simulates real keyboard input with slight delays between characters
+
+## Execute JavaScript
+
+`POST /evaluate`
+
+Executes arbitrary JavaScript in the browser context and returns the result.
+
+### Request Body
+
+<ParamField path="expression" type="string" required>
+  JavaScript code to execute. Can be a single expression or a script.
+</ParamField>
+
+### Example: Get Page Title
+
+```bash
+curl -s -X POST http://localhost:9868/evaluate \
+  -H "Content-Type: application/json" \
+  -d '{"expression":"document.title"}'
+```
+
+### Response
+
+```json
+{
+  "result": "Example Domain"
+}
+```
+
+### Response Fields
+
+<ResponseField name="result" type="any">
+  The return value of the JavaScript expression, serialized to JSON
+</ResponseField>
+
+### Example: Scroll Down
+
+```bash
+curl -s -X POST http://localhost:9868/evaluate \
+  -H "Content-Type: application/json" \
+  -d '{"expression":"window.scrollBy(0, 1500)"}'
+```
+
+### Example: Extract Custom Data
+
+```bash
+curl -s -X POST http://localhost:9868/evaluate \
+  -H "Content-Type: application/json" \
+  -d '{"expression":"JSON.stringify(Array.from(document.querySelectorAll(\"h2\")).map(h => h.innerText))"}'
+```
+
+Response:
+```json
+{
+  "result": "[\"First Heading\",\"Second Heading\",\"Third Heading\"]"
+}
+```
+
+### Example: Complex Data Extraction
+
+Extract article data from a news site:
+
+```bash
+curl -s -X POST http://localhost:9868/evaluate \
+  -H "Content-Type: application/json" \
+  -d '{"expression":"JSON.stringify(Array.from(document.querySelectorAll(\"article\")).map(a => ({ title: a.querySelector(\"h2\")?.innerText || \"\", link: a.querySelector(\"a\")?.href || \"\", excerpt: a.querySelector(\".excerpt\")?.innerText || \"\" })))"}'
+```
+
+## Common Interaction Patterns
+
+### Fill and Submit a Form
+
+```bash
+# 1. Get element snapshot to find form fields
+curl -s "http://localhost:9868/snapshot?filter=interactive" > /tmp/snapshot.json
+
+# 2. Identify refs for username (e1), password (e2), submit button (e3)
+# 3. Fill form and submit
+curl -s -X POST http://localhost:9868/action \
+  -H "Content-Type: application/json" \
+  -d '{
+    "actions": [
+      {"kind":"type","ref":"e1","text":"myuser"},
+      {"kind":"type","ref":"e2","text":"mypass"},
+      {"kind":"click","ref":"e3"}
+    ]
+  }'
+
+# 4. Wait for redirect/response
+sleep 3
+
+# 5. Check result
+curl -s http://localhost:9868/text
+```
+
+### Infinite Scroll Data Collection
+
+```python
+import json, time, urllib.request
+
+BASE = "http://localhost:9868"
+
+def post(path, data):
+    req = urllib.request.Request(f"{BASE}{path}")
+    req.add_header("Content-Type", "application/json")
+    req.method = "POST"
+    req.data = json.dumps(data).encode()
+    with urllib.request.urlopen(req, timeout=15) as r:
+        return json.loads(r.read())
+
+# Navigate to page
+post("/navigate", {"url": "https://example.com/feed"})
+time.sleep(5)
+
+# Scroll and collect data
+all_items = {}
+for i in range(30):
+    result = post("/evaluate", {
+        "expression": """JSON.stringify(
+            Array.from(document.querySelectorAll('.item')).map(item => ({
+                title: item.querySelector('h3')?.innerText || '',
+                link: item.querySelector('a')?.href || ''
+            }))
+        )"""
+    })
+    items = json.loads(result.get("result", "[]"))
+    
+    for item in items:
+        key = item.get("link", "")
+        if key and key not in all_items:
+            all_items[key] = item
+    
+    if len(all_items) >= 100:
+        break
+    
+    # Scroll down
+    post("/evaluate", {"expression": "window.scrollBy(0, 1500)"})
+    time.sleep(2)
+
+print(f"Collected {len(all_items)} items")
+```
+
+### Scrape Social Media Feed
+
+```python
+import json, time, urllib.request
+
+BASE = "http://localhost:9868"
+
+def post(path, data):
+    req = urllib.request.Request(f"{BASE}{path}")
+    req.add_header("Content-Type", "application/json")
+    req.method = "POST"
+    req.data = json.dumps(data).encode()
+    with urllib.request.urlopen(req, timeout=15) as r:
+        return json.loads(r.read())
+
+def get_json(path):
+    with urllib.request.urlopen(f"{BASE}{path}", timeout=15) as r:
+        return json.loads(r.read())
+
+# Navigate to feed
+post("/navigate", {"url": "https://x.com/home"})
+time.sleep(5)
+
+# Scroll and collect tweets
+all_tweets = {}
+for i in range(30):
+    result = post("/evaluate", {
+        "expression": """JSON.stringify(Array.from(document.querySelectorAll('article')).map(a => {
+            let timeEl = a.querySelector('time');
+            return {
+                raw: a.innerText.substring(0, 800),
+                datetime: timeEl ? timeEl.getAttribute('datetime') : '',
+                link: timeEl && timeEl.closest('a') ? timeEl.closest('a').href : ''
+            };
+        }))"""
+    })
+    articles = json.loads(result.get("result", "[]"))
+    for a in articles:
+        key = a.get("raw", "")[:150]
+        if key and key not in all_tweets:
+            all_tweets[key] = a
+
+    if len(all_tweets) >= 100:
+        break
+
+    post("/evaluate", {"expression": "window.scrollBy(0, 1500)"})
+    time.sleep(2)
+
+tweets = list(all_tweets.values())
+print(f"Collected {len(tweets)} tweets")
+```
+
+### Wait for Dynamic Content
+
+When interacting with single-page applications, content loads asynchronously:
+
+```bash
+# Click a button that loads content
+curl -s -X POST http://localhost:9868/action \
+  -H "Content-Type: application/json" \
+  -d '{"actions":[{"kind":"click","ref":"e5"}]}'
+
+# Wait for content to load
+sleep 3
+
+# Now read the updated content
+curl -s http://localhost:9868/text
+```
+
+## Scrolling
+
+Scrolling is done via JavaScript execution:
+
+```bash
+# Scroll down 1500 pixels
+curl -s -X POST http://localhost:9868/evaluate \
+  -H "Content-Type: application/json" \
+  -d '{"expression":"window.scrollBy(0, 1500)"}'
+
+# Scroll to top
+curl -s -X POST http://localhost:9868/evaluate \
+  -H "Content-Type: application/json" \
+  -d '{"expression":"window.scrollTo(0, 0)"}'
+
+# Scroll to bottom
+curl -s -X POST http://localhost:9868/evaluate \
+  -H "Content-Type: application/json" \
+  -d '{"expression":"window.scrollTo(0, document.body.scrollHeight)"}'
+```
+
+## Error Handling
+
+If an action fails (element not found, not interactable, etc.), the API returns an error:
+
+```json
+{
+  "error": "element not found: e99"
+}
+```
+
+Common errors:
+- **Element not found** — Invalid `ref` or element no longer in DOM
+- **Element not interactable** — Element is hidden or covered by another element
+- **JavaScript error** — Syntax error or runtime exception in `/evaluate`

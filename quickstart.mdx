@@ -1,80 +1,160 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Get up and running with PinchTab in minutes
 ---
 
-## Get started in three steps
+# Quickstart
 
-Get your documentation site running locally and make your first customization.
+Get PinchTab running and make your first API call to read a webpage in minutes.
 
-### Step 1: Set up your local environment
+## Prerequisites
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+Before you begin, make sure you have:
 
-### Step 2: Deploy your changes
+- PinchTab installed ([Installation guide](/installation))
+- Google Chrome and Xvfb installed
+- Chrome wrapper script created
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+## Start PinchTab
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+<Steps>
+  <Step title="Start Xvfb display server">
+    Ensure Xvfb is running to provide a virtual display:
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+    ```bash
+    pgrep Xvfb || (Xvfb :99 -screen 0 1920x1080x24 &>/dev/null &)
+    ```
+  </Step>
 
-### Step 3: Go live
+  <Step title="Launch PinchTab dashboard">
+    Start PinchTab in dashboard mode to manage multiple profiles:
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+    ```bash
+    DISPLAY=:99 \
+    CHROME_BINARY=~/.pinchtab/chrome-wrapper.sh \
+    CHROME_FLAGS="--no-sandbox --disable-gpu" \
+    nohup pinchtab dashboard > /tmp/pinchtab-dash.log 2>&1 &
+    ```
 
-## Next steps
+    The dashboard will be available at `http://localhost:9867`.
+  </Step>
 
-Now that you have your docs running, explore these key features:
+  <Step title="Launch a browser profile">
+    Create and launch your first browser profile:
 
-<CardGroup cols={2}>
+    ```bash
+    curl -s -X POST http://localhost:9867/instances/launch \
+      -H "Content-Type: application/json" \
+      -d '{"name":"default","port":"9868","headless":false}'
+    ```
 
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
+    This creates a profile named "default" running on port 9868.
+  </Step>
+</Steps>
 
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
+## Make your first API call
 
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
+Now that PinchTab is running, let's read a webpage:
 
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
+<Steps>
+  <Step title="Navigate to a webpage">
+    Tell the browser to navigate to a URL:
 
-</CardGroup>
+    ```bash
+    curl -s -X POST http://localhost:9868/navigate \
+      -H "Content-Type: application/json" \
+      -d '{"url":"https://example.com"}'
+    ```
+  </Step>
+
+  <Step title="Extract readable text">
+    Get the page's readable text content (most token-efficient):
+
+    ```bash
+    curl -s http://localhost:9868/text
+    ```
+
+    You'll get a JSON response like:
+
+    ```json
+    {
+      "text": "Example Domain\nThis domain is for use in illustrative examples...",
+      "title": "Example Domain",
+      "url": "https://example.com/"
+    }
+    ```
+  </Step>
+
+  <Step title="Take a screenshot">
+    Capture a screenshot of the page:
+
+    ```bash
+    curl -s http://localhost:9868/screenshot -o page.png
+    ```
+
+    This saves a PNG screenshot to `page.png`.
+  </Step>
+</Steps>
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+The API for each profile runs on the port you specified when launching it. In this example, we used port 9868.
 </Note>
+
+## What's next?
+
+You've successfully set up PinchTab and made your first API calls. Here's what to explore next:
+
+<CardGroup cols={2}>
+  <Card title="Cookie-based authentication" icon="cookie" href="/concepts/authentication">
+    Learn how to import cookies to access authenticated websites
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Explore all available endpoints and capabilities
+  </Card>
+  <Card title="Scraping feeds" icon="rss" href="/guides/scraping-feeds">
+    Learn how to scrape dynamic social media feeds
+  </Card>
+  <Card title="Claude Code integration" icon="robot" href="/claude/integration">
+    Use PinchTab as a Claude Code skill
+  </Card>
+</CardGroup>
+
+## Quick reference
+
+### Dashboard API (port 9867)
+
+```bash
+# List all profiles
+curl -s http://localhost:9867/profiles
+
+# List running instances
+curl -s http://localhost:9867/instances
+
+# Stop an instance
+curl -s -X POST http://localhost:9867/instances/<id>/stop
+```
+
+### Instance API (port 9868)
+
+```bash
+# Navigate
+curl -s -X POST http://localhost:9868/navigate \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com"}'
+
+# Get text
+curl -s http://localhost:9868/text
+
+# Get snapshot
+curl -s http://localhost:9868/snapshot
+
+# Screenshot
+curl -s http://localhost:9868/screenshot -o screenshot.png
+
+# Check health
+curl -s http://localhost:9868/health
+```
+
+<Tip>
+Use the `/text` endpoint by default — it's the most token-efficient way to read pages. Only use `/snapshot` when you need interactive elements, and `/screenshot` when you need visual data.
+</Tip>

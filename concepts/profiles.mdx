@@ -1,0 +1,456 @@
+---
+title: Profiles
+description: Chrome profile management, persistence, and the difference between dashboard mode and single profile mode
+---
+
+PinchTab uses Chrome profiles to maintain separate browsing contexts with persistent cookies, sessions, and browser data. This enables authenticated sessions to persist across restarts and allows management of multiple isolated browsing environments.
+
+## What are Chrome Profiles?
+
+A Chrome profile is a directory that stores all browser data for a specific user or context:
+
+- **Cookies**: Authentication tokens and session data
+- **Local Storage**: Website data stored in the browser
+- **Cache**: Downloaded resources and cached pages
+- **History**: Browsing history and page visits
+- **Extensions**: Installed browser extensions (if any)
+- **Preferences**: Browser settings and configurations
+
+<Info>
+Each profile is completely isolated from others, allowing you to maintain separate authenticated sessions for different users or use cases.
+</Info>
+
+## Profile Storage Location
+
+Profiles are stored in the PinchTab profiles directory:
+
+```
+~/.pinchtab/profiles/
+├── default/
+│   ├── Cookies
+│   ├── Local Storage/
+│   ├── Cache/
+│   └── Preferences
+├── my-profile/
+│   ├── Cookies
+│   ├── Local Storage/
+│   ├── Cache/
+│   └── Preferences
+└── twitter-bot/
+    ├── Cookies
+    ├── Local Storage/
+    ├── Cache/
+    └── Preferences
+```
+
+<Note>
+The profile directory path can be customized using the `BRIDGE_PROFILE` environment variable in single profile mode.
+</Note>
+
+## Dashboard Mode vs Single Profile Mode
+
+PinchTab can operate in two different modes, each suited for different use cases:
+
+### Dashboard Mode (Multiple Profiles)
+
+Dashboard mode allows you to manage multiple Chrome profiles simultaneously:
+
+**Features:**
+- Central dashboard on port `9867`
+- Each profile runs on its own port (9868, 9869, etc.)
+- Launch, stop, and monitor profiles via API
+- View logs for each profile instance
+- List all available profiles
+- Ideal for managing multiple users or websites
+
+**Starting Dashboard Mode:**
+
+```bash
+# Ensure Xvfb is running
+pgrep Xvfb || (Xvfb :99 -screen 0 1920x1080x24 &>/dev/null &)
+
+# Start PinchTab dashboard
+DISPLAY=:99 \
+CHROME_BINARY=~/.pinchtab/chrome-wrapper.sh \
+CHROME_FLAGS="--no-sandbox --disable-gpu" \
+nohup pinchtab dashboard > /tmp/pinchtab-dash.log 2>&1 &
+
+# Dashboard is now available at http://localhost:9867
+```
+
+**Launching a Profile:**
+
+```bash
+curl -s -X POST http://localhost:9867/instances/launch \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "my-profile",
+    "port": "9868",
+    "headless": false
+  }'
+```
+
+**Dashboard API Endpoints:**
+
+<CardGroup cols={2}>
+  <Card title="List Profiles" icon="list">
+    `GET http://localhost:9867/profiles`
+    
+    Returns all available profiles in the profiles directory
+  </Card>
+  
+  <Card title="List Instances" icon="browser">
+    `GET http://localhost:9867/instances`
+    
+    Returns all currently running profile instances
+  </Card>
+  
+  <Card title="Launch Instance" icon="play">
+    `POST http://localhost:9867/instances/launch`
+    
+    Start a new profile instance
+  </Card>
+  
+  <Card title="Stop Instance" icon="stop">
+    `POST http://localhost:9867/instances/<id>/stop`
+    
+    Stop a running profile instance
+  </Card>
+</CardGroup>
+
+### Single Profile Mode
+
+Single profile mode runs a single Chrome profile without the dashboard:
+
+**Features:**
+- Simpler setup for single-purpose automation
+- Direct port configuration via environment variables
+- No dashboard overhead
+- Ideal for dedicated automation tasks
+
+**Starting Single Profile Mode:**
+
+```bash
+pgrep Xvfb || (Xvfb :99 -screen 0 1920x1080x24 &>/dev/null &)
+
+DISPLAY=:99 \
+CHROME_BINARY=~/.pinchtab/chrome-wrapper.sh \
+BRIDGE_PORT=9868 \
+BRIDGE_PROFILE=~/.pinchtab/profiles/default \
+BRIDGE_HEADLESS=false \
+BRIDGE_NO_RESTORE=true \
+nohup pinchtab > /tmp/pinchtab.log 2>&1 &
+```
+
+**Key Environment Variables:**
+
+| Variable | Description | Example |
+|----------|-------------|----------|
+| `BRIDGE_PORT` | API port for the profile | `9868` |
+| `BRIDGE_PROFILE` | Profile directory path | `~/.pinchtab/profiles/default` |
+| `BRIDGE_HEADLESS` | Run in headless mode | `false` |
+| `BRIDGE_NO_RESTORE` | Don't restore previous tabs | `true` |
+
+## Profile Persistence
+
+Profiles maintain persistence across PinchTab restarts:
+
+<Steps>
+  <Step title="Cookie Persistence">
+    Cookies are stored in Chrome's SQLite database within the profile directory. Once imported, they persist until expiration.
+  </Step>
+  
+  <Step title="Session Persistence">
+    Authenticated sessions remain active as long as the cookies are valid (typically weeks to months).
+  </Step>
+  
+  <Step title="Process Persistence">
+    When PinchTab is launched with `nohup`, it survives terminal disconnects and continues running in the background.
+  </Step>
+  
+  <Step title="Data Persistence">
+    All browser data (local storage, cache, preferences) persists across restarts.
+  </Step>
+</Steps>
+
+<Check>
+Users only need to import cookies once per site. The session persists across PinchTab restarts until the cookies expire.
+</Check>
+
+## Creating and Managing Profiles
+
+### Creating a New Profile
+
+Profiles are created automatically when launched:
+
+**Dashboard Mode:**
+```bash
+curl -s -X POST http://localhost:9867/instances/launch \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "twitter-bot",
+    "port": "9869",
+    "headless": false
+  }'
+```
+
+If `twitter-bot` doesn't exist in `~/.pinchtab/profiles/`, it will be created automatically.
+
+**Single Profile Mode:**
+```bash
+BRIDGE_PROFILE=~/.pinchtab/profiles/new-profile pinchtab
+```
+
+### Listing Profiles
+
+**Dashboard Mode:**
+```bash
+curl -s http://localhost:9867/profiles
+```
+
+**Manual Check:**
+```bash
+ls -la ~/.pinchtab/profiles/
+```
+
+### Deleting a Profile
+
+To delete a profile, simply remove its directory:
+
+```bash
+rm -rf ~/.pinchtab/profiles/old-profile
+```
+
+<Warning>
+Deleting a profile removes all cookies, sessions, and browser data. Users will need to re-authenticate for all websites.
+</Warning>
+
+## Profile Isolation
+
+Each profile is completely isolated:
+
+- **Cookies**: Not shared between profiles
+- **Sessions**: Independent authentication states
+- **Local Storage**: Separate data stores
+- **Cache**: No shared cached resources
+
+**Example Use Cases:**
+
+<CardGroup cols={2}>
+  <Card title="Multiple Accounts" icon="users">
+    Manage multiple user accounts on the same website using separate profiles
+  </Card>
+  
+  <Card title="Different Websites" icon="globe">
+    Isolate automation for different websites or services
+  </Card>
+  
+  <Card title="Testing" icon="flask">
+    Maintain separate profiles for testing vs production
+  </Card>
+  
+  <Card title="Clients" icon="briefcase">
+    Keep client data separated in dedicated profiles
+  </Card>
+</CardGroup>
+
+## Instance Management (Dashboard Mode)
+
+### Viewing Running Instances
+
+```bash
+curl -s http://localhost:9867/instances
+```
+
+**Example Response:**
+```json
+[
+  {
+    "id": "abc123",
+    "name": "my-profile",
+    "port": "9868",
+    "headless": false,
+    "status": "running",
+    "started": "2026-03-03T10:30:00Z"
+  },
+  {
+    "id": "def456",
+    "name": "twitter-bot",
+    "port": "9869",
+    "headless": true,
+    "status": "running",
+    "started": "2026-03-03T11:15:00Z"
+  }
+]
+```
+
+### Stopping an Instance
+
+```bash
+curl -s -X POST http://localhost:9867/instances/abc123/stop
+```
+
+<Info>
+Stopping an instance closes the Chrome browser but preserves the profile directory. You can restart it later with the same session data.
+</Info>
+
+### Viewing Instance Logs
+
+```bash
+curl -s http://localhost:9867/instances/abc123/logs
+```
+
+Useful for debugging connection issues, navigation errors, or API problems.
+
+## Profile Configuration
+
+You can configure profile behavior using environment variables:
+
+### Tab Restoration
+
+```bash
+# Don't restore previous tabs on startup
+BRIDGE_NO_RESTORE=true
+```
+
+### Headless Mode
+
+```bash
+# Run Chrome in headless mode (no GUI)
+BRIDGE_HEADLESS=true
+```
+
+### Maximum Tabs
+
+```bash
+# Limit concurrent tabs
+BRIDGE_MAX_TABS=10
+```
+
+### Media Blocking
+
+```bash
+# Block media loading for faster performance
+BRIDGE_BLOCK_MEDIA=true
+BRIDGE_BLOCK_IMAGES=true
+```
+
+## Accessing Profile APIs
+
+Each profile instance has its own HTTP API:
+
+**Dashboard Mode:**
+- Profile 1: `http://localhost:9868`
+- Profile 2: `http://localhost:9869`
+- Profile 3: `http://localhost:9870`
+
+**Single Profile Mode:**
+- Configured port: `http://localhost:<BRIDGE_PORT>`
+
+**Example API Calls:**
+
+```bash
+# Navigate in profile 1
+curl -s -X POST http://localhost:9868/navigate \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://x.com"}'
+
+# Navigate in profile 2
+curl -s -X POST http://localhost:9869/navigate \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://linkedin.com"}'
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Dashboard Mode for Multiple Profiles">
+    If you need to manage more than one profile, use dashboard mode. It provides centralized management and easier instance control.
+  </Accordion>
+  
+  <Accordion title="Use Single Profile Mode for Dedicated Tasks">
+    For single-purpose automation (e.g., a dedicated scraping bot), single profile mode is simpler and has less overhead.
+  </Accordion>
+  
+  <Accordion title="Name Profiles Descriptively">
+    Use clear profile names like `twitter-scraper`, `linkedin-bot`, or `user-alice` rather than generic names.
+  </Accordion>
+  
+  <Accordion title="Back Up Important Profiles">
+    If a profile contains critical session data, back up the profile directory:
+    ```bash
+    tar -czf my-profile-backup.tar.gz ~/.pinchtab/profiles/my-profile
+    ```
+  </Accordion>
+  
+  <Accordion title="Clean Up Unused Profiles">
+    Delete profiles you're no longer using to save disk space:
+    ```bash
+    rm -rf ~/.pinchtab/profiles/old-profile
+    ```
+  </Accordion>
+  
+  <Accordion title="Use BRIDGE_NO_RESTORE for Fresh Starts">
+    Set `BRIDGE_NO_RESTORE=true` when you don't want Chrome to restore the previous session's tabs.
+  </Accordion>
+</AccordionGroup>
+
+## Profile Size and Performance
+
+Profile directories grow over time as they accumulate:
+
+- Cookies
+- Cached files
+- Local storage data
+- Browsing history
+
+**Checking Profile Size:**
+
+```bash
+du -sh ~/.pinchtab/profiles/*
+```
+
+**Cleaning Profile Cache:**
+
+```bash
+# Remove cache directory (safe, will be recreated)
+rm -rf ~/.pinchtab/profiles/my-profile/Cache/
+```
+
+<Warning>
+Don't delete the Cookies database or you'll lose authenticated sessions.
+</Warning>
+
+## Troubleshooting
+
+### Profile Won't Start
+
+1. Check if the port is already in use:
+   ```bash
+   lsof -i :9868
+   ```
+
+2. Verify the profile directory exists and is readable:
+   ```bash
+   ls -la ~/.pinchtab/profiles/my-profile
+   ```
+
+3. Check instance logs in dashboard mode:
+   ```bash
+   curl -s http://localhost:9867/instances/<id>/logs
+   ```
+
+### Session Lost After Restart
+
+1. Verify the profile directory still exists
+2. Check if cookies have expired
+3. Ensure you're using the same profile path
+4. Verify Chrome isn't clearing cookies on exit
+
+### Multiple Instances Using Same Profile
+
+<Warning>
+Don't run multiple Chrome instances with the same profile directory. This can cause data corruption and lock conflicts.
+</Warning>
+
+Each profile should only be used by one instance at a time.

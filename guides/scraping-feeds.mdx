@@ -1,0 +1,166 @@
+---
+title: Scraping Social Media Feeds
+description: Learn how to scrape dynamic social media feeds using PinchTab
+---
+
+This guide demonstrates how to scrape social media feeds that require authentication and infinite scrolling.
+
+## Overview
+
+Social media feeds are dynamic — content loads as you scroll. To scrape them effectively:
+
+1. Navigate to the feed (authenticated)
+2. Execute JavaScript to extract visible content
+3. Scroll down to load more
+4. Repeat until you have enough data
+
+## Prerequisites
+
+<Warning>
+This pattern requires an authenticated session. Make sure you've imported cookies first using the [Cookie-Editor extension](/concepts/authentication).
+</Warning>
+
+## Complete Example
+
+Here's a working Python script that scrapes X/Twitter feeds:
+
+```python
+import json, time, urllib.request
+
+BASE = "http://localhost:9868"
+
+def post(path, data):
+    req = urllib.request.Request(f"{BASE}{path}")
+    req.add_header("Content-Type", "application/json")
+    req.method = "POST"
+    req.data = json.dumps(data).encode()
+    with urllib.request.urlopen(req, timeout=15) as r:
+        return json.loads(r.read())
+
+def get_json(path):
+    with urllib.request.urlopen(f"{BASE}{path}", timeout=15) as r:
+        return json.loads(r.read())
+
+# Navigate to feed
+post("/navigate", {"url": "https://x.com/home"})
+time.sleep(5)
+
+# Scroll and collect tweets
+all_tweets = {}
+for i in range(30):
+    result = post("/evaluate", {
+        "expression": """JSON.stringify(Array.from(document.querySelectorAll('article')).map(a => {
+            let timeEl = a.querySelector('time');
+            return {
+                raw: a.innerText.substring(0, 800),
+                datetime: timeEl ? timeEl.getAttribute('datetime') : '',
+                link: timeEl && timeEl.closest('a') ? timeEl.closest('a').href : ''
+            };
+        }))"""
+    })
+    articles = json.loads(result.get("result", "[]"))
+    for a in articles:
+        key = a.get("raw", "")[:150]
+        if key and key not in all_tweets:
+            all_tweets[key] = a
+
+    if len(all_tweets) >= 100:
+        break
+
+    post("/evaluate", {"expression": "window.scrollBy(0, 1500)"})
+    time.sleep(2)
+
+tweets = list(all_tweets.values())
+```
+
+## How It Works
+
+### Step 1: Navigate to the Feed
+
+```python
+post("/navigate", {"url": "https://x.com/home"})
+time.sleep(5)
+```
+
+Wait for the initial page load. Adjust the sleep duration based on your network speed.
+
+### Step 2: Extract Visible Content
+
+```python
+result = post("/evaluate", {
+    "expression": """JSON.stringify(Array.from(document.querySelectorAll('article')).map(a => {
+        let timeEl = a.querySelector('time');
+        return {
+            raw: a.innerText.substring(0, 800),
+            datetime: timeEl ? timeEl.getAttribute('datetime') : '',
+            link: timeEl && timeEl.closest('a') ? timeEl.closest('a').href : ''
+        };
+    }))"""
+})
+```
+
+This JavaScript:
+- Selects all `<article>` elements (tweets)
+- Extracts text content, timestamp, and link
+- Returns structured JSON
+
+### Step 3: Deduplicate and Store
+
+```python
+for a in articles:
+    key = a.get("raw", "")[:150]
+    if key and key not in all_tweets:
+        all_tweets[key] = a
+```
+
+Use the first 150 characters as a key to avoid duplicates when content re-appears after scrolling.
+
+### Step 4: Scroll for More
+
+```python
+post("/evaluate", {"expression": "window.scrollBy(0, 1500)"})
+time.sleep(2)
+```
+
+Scroll down 1500 pixels and wait for new content to load.
+
+## Adapting for Other Platforms
+
+The same pattern works for other social media sites — just adjust:
+
+<Steps>
+  <Step title="Change the URL">
+    Navigate to the target platform's feed URL
+  </Step>
+  <Step title="Update the selector">
+    Find the DOM selector for posts (inspect the page to find it)
+  </Step>
+  <Step title="Adjust extraction logic">
+    Extract the fields you need from each post element
+  </Step>
+</Steps>
+
+## Tips
+
+<Tip>
+**Set a reasonable limit**: Don't scrape indefinitely. The example stops at 100 tweets or 30 scroll iterations.
+</Tip>
+
+<Tip>
+**Add delays**: Include `time.sleep()` between scrolls to let content load and avoid rate limiting.
+</Tip>
+
+<Tip>
+**Validate the session first**: Use the [session validation pattern](/guides/session-validation) before starting a scraping task.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Session Validation" icon="shield-check" href="/guides/session-validation">
+    Check if cookies are still valid before scraping
+  </Card>
+  <Card title="Common Patterns" icon="book" href="/guides/common-patterns">
+    More automation patterns and best practices
+  </Card>
+</CardGroup>

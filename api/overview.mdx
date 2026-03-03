@@ -1,0 +1,156 @@
+---
+title: "API Overview"
+description: "Overview of the PinchTab HTTP API for browser automation"
+---
+
+# PinchTab HTTP API Overview
+
+PinchTab provides a lightweight HTTP API that controls Chrome via the Chrome DevTools Protocol. It's designed to be token-efficient for AI agents — you get exactly the data you ask for, nothing more.
+
+## Architecture
+
+PinchTab consists of several components:
+
+- **PinchTab** (`/usr/local/bin/pinchtab`) — 12MB Go binary that wraps Chrome DevTools Protocol into an HTTP API
+- **Google Chrome** (`/usr/bin/google-chrome-stable`) — controlled browser instance
+- **Xvfb** — virtual display for headed mode on headless servers
+- **Chrome wrapper** (`~/.pinchtab/chrome-wrapper.sh`) — adds `--no-sandbox` for server environments
+
+PinchTab runs Chrome with persistent profiles. Once a user logs into a site, the session persists across restarts.
+
+## Base URL
+
+All API calls are made to the instance port where PinchTab is running:
+
+```
+http://localhost:PORT
+```
+
+The default port is `9868` for individual instances. When using dashboard mode, each profile runs on its own port (9868, 9869, etc.).
+
+## Running PinchTab
+
+### Dashboard Mode (Multiple Profiles)
+
+Dashboard mode allows you to manage multiple browser profiles, each with its own port:
+
+```bash
+# Ensure Xvfb is running
+pgrep Xvfb || (Xvfb :99 -screen 0 1920x1080x24 &>/dev/null &)
+
+# Start PinchTab dashboard
+DISPLAY=:99 \
+CHROME_BINARY=~/.pinchtab/chrome-wrapper.sh \
+CHROME_FLAGS="--no-sandbox --disable-gpu" \
+nohup pinchtab dashboard > /tmp/pinchtab-dash.log 2>&1 &
+
+# Dashboard is at http://localhost:9867
+```
+
+Launch a profile via the dashboard API:
+
+```bash
+curl -s -X POST http://localhost:9867/instances/launch \
+  -H "Content-Type: application/json" \
+  -d '{"name":"my-profile","port":"9868","headless":false}'
+```
+
+### Single Profile Mode
+
+For a single browser instance without the dashboard:
+
+```bash
+pgrep Xvfb || (Xvfb :99 -screen 0 1920x1080x24 &>/dev/null &)
+
+DISPLAY=:99 \
+CHROME_BINARY=~/.pinchtab/chrome-wrapper.sh \
+BRIDGE_PORT=9868 \
+BRIDGE_PROFILE=~/.pinchtab/profiles/default \
+BRIDGE_HEADLESS=false \
+BRIDGE_NO_RESTORE=true \
+nohup pinchtab > /tmp/pinchtab.log 2>&1 &
+```
+
+## API Endpoints
+
+The PinchTab API is organized into several categories:
+
+### Navigation
+- `POST /navigate` — Navigate to a URL
+- `GET /tabs` — List open tabs
+
+### Reading Content
+- `GET /text` — Get readable text from the page (most token-efficient)
+- `GET /snapshot` — Get interactive element snapshot
+- `GET /screenshot` — Take a screenshot of the current page
+
+### Interaction
+- `POST /action` — Perform actions like clicking and typing
+- `POST /evaluate` — Execute JavaScript in the browser context
+
+### Cookies
+- `GET /cookies` — Retrieve cookies for a URL
+- `POST /cookies` — Import cookies for authentication
+
+### Health
+- `GET /health` — Check API and browser status
+
+## Request Format
+
+Most POST requests accept JSON payloads:
+
+```bash
+curl -s -X POST http://localhost:9868/navigate \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com"}'
+```
+
+## Response Format
+
+Responses are returned as JSON (or binary for screenshots):
+
+```json
+{
+  "text": "Page content...",
+  "title": "Page Title",
+  "url": "https://example.com"
+}
+```
+
+## Environment Variables
+
+PinchTab can be configured using environment variables:
+
+| Variable | Description | Default |
+|----------|-------------|------|
+| `CHROME_BINARY` | Path to Chrome or wrapper script | auto-detect |
+| `CHROME_FLAGS` | Extra Chrome flags | — |
+| `BRIDGE_PORT` | PinchTab API port | 9867 |
+| `BRIDGE_PROFILE` | Chrome profile directory | — |
+| `BRIDGE_HEADLESS` | Run Chrome headless | true |
+| `BRIDGE_TOKEN` | Auth token for PinchTab API | — (disabled) |
+| `BRIDGE_STEALTH` | Fingerprint stealth level | light |
+| `BRIDGE_NO_RESTORE` | Don't restore previous tabs | false |
+| `BRIDGE_NO_DASHBOARD` | Run without dashboard | false |
+| `BRIDGE_BLOCK_MEDIA` | Block media loading | false |
+| `BRIDGE_BLOCK_IMAGES` | Block image loading | false |
+| `BRIDGE_NAV_TIMEOUT` | Navigation timeout | 30s |
+| `BRIDGE_MAX_TABS` | Max concurrent tabs | — |
+| `BRIDGE_TIMEZONE` | Override timezone | — |
+| `BRIDGE_USER_AGENT` | Override user agent | — |
+
+## Best Practices
+
+- **Use `/text` by default** — It's the most token-efficient way to read page content
+- **Always use the Chrome wrapper on servers** — Chrome needs `--no-sandbox` in containerized environments
+- **Launch with `nohup`** — PinchTab instances and dashboard survive terminal disconnects
+- **Cookie sessions persist** — Stored in the profile directory across restarts
+- **Check session validity** — Navigate to an authenticated page and verify the title isn't a login screen
+
+## Next Steps
+
+- [Navigation](/api/navigation) — Learn how to navigate and manage tabs
+- [Reading Content](/api/reading-content) — Extract text, snapshots, and screenshots
+- [Interaction](/api/interaction) — Click, type, scroll, and execute JavaScript
+- [Cookies](/api/cookies) — Import and export cookies for authentication
+- [Health](/api/health) — Monitor API and browser status

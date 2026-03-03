@@ -1,0 +1,164 @@
+---
+title: Taking Screenshots
+description: Capture visual snapshots of web pages using PinchTab
+---
+
+PinchTab's screenshot endpoint captures the current state of a web page as a PNG image.
+
+## Basic Usage
+
+Take a screenshot and save it to a file:
+
+```bash
+curl -s http://localhost:9868/screenshot -o /tmp/page.png
+```
+
+The screenshot captures the current viewport of the page at the moment the request is made.
+
+## Complete Workflow
+
+Typically, you'll navigate to a page before taking a screenshot:
+
+```bash
+# Navigate to the target page
+curl -s -X POST http://localhost:9868/navigate \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com"}'
+
+# Wait for page to load
+sleep 3
+
+# Take screenshot
+curl -s http://localhost:9868/screenshot -o /tmp/example.png
+```
+
+## Common Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Visual Verification" icon="eye">
+    Confirm pages loaded correctly and show expected content
+  </Card>
+  <Card title="Debugging" icon="bug">
+    Diagnose rendering issues or unexpected page states
+  </Card>
+  <Card title="Monitoring" icon="chart-line">
+    Track visual changes on websites over time
+  </Card>
+  <Card title="Documentation" icon="book">
+    Capture examples for tutorials or reports
+  </Card>
+</CardGroup>
+
+## Screenshot Before Scraping
+
+When scraping complex pages, take a screenshot first to verify the page state:
+
+```bash
+# Navigate to social media feed
+curl -s -X POST http://localhost:9868/navigate \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://x.com/home"}'
+sleep 5
+
+# Capture what the page looks like
+curl -s http://localhost:9868/screenshot -o /tmp/feed-before.png
+
+# Now proceed with scraping...
+```
+
+This helps diagnose issues if scraping fails — you can visually confirm whether:
+- The page loaded correctly
+- You're authenticated (not seeing a login screen)
+- Content is visible (not blocked by popups or banners)
+
+## Screenshots After Scrolling
+
+Capture different sections of a long page:
+
+```bash
+# Initial view
+curl -s http://localhost:9868/screenshot -o /tmp/top.png
+
+# Scroll down
+curl -s -X POST http://localhost:9868/evaluate \
+  -H "Content-Type: application/json" \
+  -d '{"expression":"window.scrollBy(0, 1500)"}'
+sleep 2
+
+# Capture after scroll
+curl -s http://localhost:9868/screenshot -o /tmp/middle.png
+```
+
+## Python Example
+
+Integrate screenshots into Python automation:
+
+```python
+import json, time, urllib.request
+
+BASE = "http://localhost:9868"
+
+def post(path, data):
+    req = urllib.request.Request(f"{BASE}{path}")
+    req.add_header("Content-Type", "application/json")
+    req.method = "POST"
+    req.data = json.dumps(data).encode()
+    with urllib.request.urlopen(req, timeout=15) as r:
+        return json.loads(r.read())
+
+def screenshot(filename):
+    with urllib.request.urlopen(f"{BASE}/screenshot", timeout=15) as r:
+        with open(filename, 'wb') as f:
+            f.write(r.read())
+
+# Navigate and capture
+post("/navigate", {"url": "https://example.com"})
+time.sleep(3)
+screenshot("/tmp/example.png")
+print("Screenshot saved to /tmp/example.png")
+```
+
+## Technical Details
+
+<AccordionGroup>
+  <Accordion title="Image Format">
+    Screenshots are returned as PNG images with full color depth.
+  </Accordion>
+  
+  <Accordion title="Viewport Size">
+    The screenshot captures the current browser viewport. By default, this is determined by the Chrome window size (typically 1920x1080 when using Xvfb with the recommended settings).
+  </Accordion>
+  
+  <Accordion title="Performance">
+    Screenshots are generated quickly (typically under 1 second). However, for very large pages or slow networks, add a delay after navigation before capturing.
+  </Accordion>
+  
+  <Accordion title="File Size">
+    PNG file sizes vary based on content complexity. Typical screenshots range from 50KB to 2MB.
+  </Accordion>
+</AccordionGroup>
+
+## Tips
+
+<Tip>
+**Wait for content to load**: Always add a delay (`sleep`) after navigation before taking screenshots to ensure all content has rendered.
+</Tip>
+
+<Tip>
+**Use descriptive filenames**: Include timestamps or page identifiers in filenames for easier organization: `/tmp/twitter-feed-2026-03-03-14-30.png`
+</Tip>
+
+<Tip>
+**Combine with /text**: Use screenshots for visual verification, but extract actual data using `/text` or `/evaluate` for token efficiency.
+</Tip>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Reading Content" icon="file-lines" href="/api-reference/text">
+    Extract text content from pages (more efficient than screenshots for data)
+  </Card>
+  <Card title="Common Patterns" icon="book" href="/guides/common-patterns">
+    Learn other useful automation patterns
+  </Card>
+</CardGroup>

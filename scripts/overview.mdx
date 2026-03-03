@@ -1,0 +1,97 @@
+---
+title: Scripts Overview
+description: Helper scripts for browser automation setup and control
+---
+
+The PinchTab repository includes several helper scripts to streamline browser automation setup and interaction. These scripts are particularly useful for setting up VNC-based visual access to browsers and interacting with Chrome DevTools Protocol.
+
+## Available Scripts
+
+### install-deps.sh
+
+Installs all system dependencies required for the VNC-based browser stack.
+
+**What it installs:**
+- Xvfb (virtual X server)
+- x11vnc (VNC server)
+- noVNC (web-based VNC client)
+- Playwright Chromium and its system dependencies
+
+**When to use:** Run this once on a new server before launching the VNC stack.
+
+[Learn more →](/scripts/install-deps)
+
+### launch-browser.sh
+
+Launches a complete browser automation stack with visual access via VNC.
+
+**What it does:**
+- Starts Xvfb (virtual display)
+- Launches Chromium with Chrome DevTools Protocol
+- Starts x11vnc (VNC server)
+- Starts websockify/noVNC (web-based VNC client)
+- Creates cloudflared tunnel for remote access
+- Outputs connection details as JSON
+
+**When to use:** When you need visual access to the browser through a web interface.
+
+[Learn more →](/scripts/launch-browser)
+
+### browser-connect.ts
+
+TypeScript CLI tool for interacting with a running Chromium instance via CDP.
+
+**What it does:**
+- Connects to Chrome DevTools Protocol endpoint
+- Provides simple commands for common tasks
+- Supports status checks, screenshots, navigation, cookies, HTML extraction, and JavaScript evaluation
+
+**When to use:** For programmatic control and inspection of a running browser instance.
+
+[Learn more →](/scripts/browser-connect)
+
+## VNC Stack vs PinchTab
+
+These scripts provide an alternative approach to browser automation:
+
+<CardGroup cols={2}>
+  <Card title="VNC Stack (Scripts)" icon="desktop">
+    - Visual access via web browser
+    - Good for debugging and manual inspection
+    - Requires more resources (Xvfb, VNC server)
+    - Uses Playwright's Chromium
+  </Card>
+  <Card title="PinchTab API" icon="code">
+    - HTTP API for automation
+    - Token-efficient, programmatic access
+    - Lightweight, production-ready
+    - Uses Google Chrome
+  </Card>
+</CardGroup>
+
+<Note>
+The scripts are primarily for development and debugging. For production automation, use the PinchTab HTTP API directly.
+</Note>
+
+## Quick Start
+
+```bash
+# 1. Install dependencies
+bash scripts/install-deps.sh
+
+# 2. Launch the browser stack
+bash scripts/launch-browser.sh https://example.com
+
+# 3. Interact with the browser
+bun run scripts/browser-connect.ts status
+bun run scripts/browser-connect.ts screenshot
+bun run scripts/browser-connect.ts navigate https://google.com
+```
+
+## Common Workflow
+
+1. **Setup** - Run `install-deps.sh` once per server
+2. **Launch** - Start the browser stack with `launch-browser.sh`
+3. **Interact** - Use `browser-connect.ts` for automated tasks
+4. **Debug** - Open the noVNC URL in your browser for visual access
+5. **Stop** - Run `stop-browser.sh` when done

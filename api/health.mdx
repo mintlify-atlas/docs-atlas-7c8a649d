@@ -1,0 +1,120 @@
+---
+title: "Health"
+description: "Check API and browser status"
+---
+
+# Health API
+
+The Health API provides a simple endpoint to check if the PinchTab instance and browser are running correctly.
+
+## Get Health Status
+
+`GET /health`
+
+Returns the health status of the PinchTab instance, Chrome DevTools Protocol connection, and number of open tabs.
+
+### Example Request
+
+```bash
+curl -s http://localhost:9868/health
+```
+
+### Response
+
+```json
+{
+  "cdp": "",
+  "status": "ok",
+  "tabs": 1
+}
+```
+
+### Response Fields
+
+<ResponseField name="status" type="string">
+  Overall health status. Returns `"ok"` when the instance is healthy.
+</ResponseField>
+
+<ResponseField name="cdp" type="string">
+  Chrome DevTools Protocol connection status. Empty string when healthy.
+</ResponseField>
+
+<ResponseField name="tabs" type="number">
+  Number of open tabs in the browser instance
+</ResponseField>
+
+## Usage
+
+The health endpoint is useful for:
+
+- **Monitoring** — Check if PinchTab is running before making other API calls
+- **Debugging** — Verify the browser and CDP connection are working
+- **Load management** — Track the number of open tabs
+
+### Example: Check Before Navigation
+
+```bash
+# Check health first
+HEALTH=$(curl -s http://localhost:9868/health)
+STATUS=$(echo $HEALTH | python3 -c "import json,sys; print(json.load(sys.stdin).get('status',''))")
+
+if [ "$STATUS" = "ok" ]; then
+    echo "PinchTab is healthy, proceeding with navigation"
+    curl -s -X POST http://localhost:9868/navigate \
+      -H "Content-Type: application/json" \
+      -d '{"url":"https://example.com"}'
+else
+    echo "PinchTab is not healthy: $HEALTH"
+fi
+```
+
+### Example: Monitor Tab Count
+
+```bash
+TABS=$(curl -s http://localhost:9868/health | python3 -c "import json,sys; print(json.load(sys.stdin).get('tabs',0))")
+echo "Currently $TABS tab(s) open"
+```
+
+## Error States
+
+If the health check fails, you may receive:
+
+- **Connection refused** — PinchTab is not running
+- **Timeout** — PinchTab is unresponsive
+- **CDP error** — Browser connection is broken (check `cdp` field)
+
+### Troubleshooting
+
+If the health check fails:
+
+1. **Verify PinchTab is running:**
+   ```bash
+   pgrep -f pinchtab
+   ```
+
+2. **Check logs:**
+   ```bash
+   tail -f /tmp/pinchtab.log
+   ```
+
+3. **Restart PinchTab if needed:**
+   ```bash
+   pkill -f pinchtab
+   DISPLAY=:99 CHROME_BINARY=~/.pinchtab/chrome-wrapper.sh \
+   BRIDGE_PORT=9868 nohup pinchtab > /tmp/pinchtab.log 2>&1 &
+   ```
+
+4. **Verify Xvfb is running:**
+   ```bash
+   pgrep Xvfb || (Xvfb :99 -screen 0 1920x1080x24 &>/dev/null &)
+   ```
+
+## Dashboard Health
+
+When running in dashboard mode (port 9867), the dashboard itself also has a health endpoint:
+
+```bash
+curl -s http://localhost:9867/health
+```
+
+This checks the dashboard's health, not individual instances. Use instance-specific ports (9868, 9869, etc.) to check individual browser instances.

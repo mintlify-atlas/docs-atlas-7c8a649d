@@ -1,0 +1,172 @@
+---
+title: "Navigation"
+description: "Navigate to URLs and manage browser tabs"
+---
+
+# Navigation API
+
+The Navigation API allows you to navigate to URLs and manage browser tabs.
+
+## Navigate to a URL
+
+`POST /navigate`
+
+Navigates the current tab to the specified URL.
+
+### Request Body
+
+<ParamField path="url" type="string" required>
+  The URL to navigate to. Must include protocol (http:// or https://).
+</ParamField>
+
+### Example Request
+
+```bash
+curl -s -X POST http://localhost:9868/navigate \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com"}'
+```
+
+### Response
+
+Returns a success status when navigation completes.
+
+```json
+{
+  "status": "ok"
+}
+```
+
+### Usage Notes
+
+- Navigation waits for the page to load (respects `BRIDGE_NAV_TIMEOUT`, default 30s)
+- Always include the protocol (`https://` or `http://`)
+- After navigation, wait a few seconds for dynamic content to render before reading the page
+
+### Common Pattern: Navigate and Read
+
+```bash
+# Navigate to a page
+curl -s -X POST http://localhost:9868/navigate \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com/article"}'
+
+# Wait for page to load
+sleep 3
+
+# Extract text content
+curl -s http://localhost:9868/text
+```
+
+## Get Open Tabs
+
+`GET /tabs`
+
+Returns a list of all open tabs in the browser instance.
+
+### Example Request
+
+```bash
+curl -s http://localhost:9868/tabs
+```
+
+### Response
+
+Returns an array of tab objects:
+
+```json
+[
+  {
+    "id": "1234-5678-9012",
+    "url": "https://example.com",
+    "title": "Example Domain"
+  },
+  {
+    "id": "2345-6789-0123",
+    "url": "https://google.com",
+    "title": "Google"
+  }
+]
+```
+
+### Response Fields
+
+<ResponseField name="id" type="string">
+  Unique identifier for the tab
+</ResponseField>
+
+<ResponseField name="url" type="string">
+  Current URL of the tab
+</ResponseField>
+
+<ResponseField name="title" type="string">
+  Page title of the tab
+</ResponseField>
+
+## Authentication Flow
+
+When navigating to authenticated sites, follow this pattern:
+
+```bash
+# 1. Navigate to the domain first
+curl -s -X POST http://localhost:9868/navigate \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://x.com"}'
+
+# 2. Import cookies (see Cookies API)
+curl -s -X POST http://localhost:9868/cookies \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://x.com",
+    "cookies": [...]
+  }'
+
+# 3. Navigate to the authenticated page
+curl -s -X POST http://localhost:9868/navigate \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://x.com/home"}'
+```
+
+## Check Session Validity
+
+Verify that a session is still valid by navigating and checking the page title:
+
+```bash
+# Navigate to the authenticated page
+curl -s -X POST http://localhost:9868/navigate \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://x.com/home"}'
+sleep 4
+
+# Check if we got the feed or a login page
+TITLE=$(curl -s http://localhost:9868/text | python3 -c "import json,sys; print(json.load(sys.stdin).get('title',''))")
+
+if echo "$TITLE" | grep -qi "log in\|sign in\|join"; then
+    echo "Session expired — need fresh cookies from user"
+else
+    echo "Session valid — authenticated"
+fi
+```
+
+## Timeouts
+
+Navigation timeout can be configured via the `BRIDGE_NAV_TIMEOUT` environment variable (default: 30s):
+
+```bash
+BRIDGE_NAV_TIMEOUT=60s pinchtab
+```
+
+## Error Handling
+
+If navigation fails (timeout, network error, etc.), the API will return an error response:
+
+```json
+{
+  "error": "navigation timeout"
+}
+```
+
+Common error scenarios:
+- **Timeout** — Page took longer than `BRIDGE_NAV_TIMEOUT` to load
+- **Network error** — DNS failure, connection refused, etc.
+- **Invalid URL** — Malformed URL or missing protocol

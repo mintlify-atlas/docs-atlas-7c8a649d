@@ -1,0 +1,344 @@
+---
+title: Common Workflows
+description: Practical examples of using PinchTab with Claude Code for browser automation tasks
+---
+
+## Overview
+
+This guide covers common workflows when using PinchTab with Claude Code. The SKILL.md file provides Claude with instructions for these patterns, but understanding them helps you request tasks more effectively.
+
+## Starting PinchTab
+
+Claude needs to start PinchTab before performing any browser automation.
+
+### Dashboard Mode (Multiple Profiles)
+
+For managing multiple browser profiles:
+
+```bash
+# Ensure Xvfb is running
+pgrep Xvfb || (Xvfb :99 -screen 0 1920x1080x24 &>/dev/null &)
+
+# Start PinchTab dashboard
+DISPLAY=:99 \
+CHROME_BINARY=~/.pinchtab/chrome-wrapper.sh \
+CHROME_FLAGS="--no-sandbox --disable-gpu" \
+nohup pinchtab dashboard > /tmp/pinchtab-dash.log 2>&1 &
+
+# Dashboard runs at http://localhost:9867
+```
+
+Then launch a profile:
+
+```bash
+curl -s -X POST http://localhost:9867/instances/launch \
+  -H "Content-Type: application/json" \
+  -d '{"name":"my-profile","port":"9868","headless":false}'
+```
+
+### Single Profile Mode
+
+For simple tasks with one profile:
+
+```bash
+pgrep Xvfb || (Xvfb :99 -screen 0 1920x1080x24 &>/dev/null &)
+
+DISPLAY=:99 \
+CHROME_BINARY=~/.pinchtab/chrome-wrapper.sh \
+BRIDGE_PORT=9868 \
+BRIDGE_PROFILE=~/.pinchtab/profiles/default \
+BRIDGE_HEADLESS=false \
+BRIDGE_NO_RESTORE=true \
+nohup pinchtab > /tmp/pinchtab.log 2>&1 &
+```
+
+## Requesting Cookies from Users
+
+When Claude needs to access an authenticated website, it should guide the user through the cookie export process.
+
+### Example Request
+
+```
+To access X/Twitter on your behalf, I need your login cookies. Here's what to do:
+
+1. Install the Cookie-Editor extension if you haven't already:
+   https://chromewebstore.google.com/detail/hlkenndednhfkekhgcdicdfddnkalmdm
+
+2. Go to https://x.com in your browser (make sure you're logged in)
+
+3. Click the Cookie-Editor icon in your toolbar
+
+4. Click "Export" (the download icon) — this copies all cookies as JSON
+
+5. Paste the JSON here
+
+That's it! I'll import your session and can then browse X/Twitter as you.
+Your cookies are stored securely in a persistent Chrome profile.
+```
+
+### Importing Cookies
+
+Once the user provides the JSON:
+
+```bash
+# Navigate to the domain first
+curl -s -X POST http://localhost:9868/navigate \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://x.com"}'
+
+# Import cookies
+curl -s -X POST http://localhost:9868/cookies \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://x.com",
+    "cookies": [
+      {"name":"auth_token","value":"...","domain":".x.com","path":"/","secure":true,"httpOnly":true,"sameSite":"None","expires":1786701753},
+      {"name":"ct0","value":"...","domain":".x.com","path":"/","secure":true,"httpOnly":false,"sameSite":"Lax","expires":1786701754}
+    ]
+  }'
+
+# Reload to apply cookies
+curl -s -X POST http://localhost:9868/navigate \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://x.com/home"}'
+```
+
+<Note>
+Cookie format mapping from Cookie-Editor to PinchTab:
+- `expirationDate` → `expires` (same Unix timestamp value)
+- `sameSite`: `"no_restriction"` → `"None"`, `"lax"` → `"Lax"`, `"strict"` → `"Strict"`
+- Ignore: `hostOnly`, `storeId`, `session`, `id`
+</Note>
+
+## Checking Session Validity
+
+Before starting a scraping task, Claude should verify the session is still active:
+
+```bash
+# Navigate to the authenticated page
+curl -s -X POST http://localhost:9868/navigate \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://x.com/home"}'
+sleep 4
+
+# Check if we got the feed or a login page
+TITLE=$(curl -s http://localhost:9868/text | python3 -c "import json,sys; print(json.load(sys.stdin).get('title',''))")
+
+if echo "$TITLE" | grep -qi "log in\|sign in\|join"; then
+    echo "Session expired — need fresh cookies from user"
+else
+    echo "Session valid — authenticated"
+fi
+```
+
+## Scraping Data
+
+### Reading a Simple Webpage
+
+For extracting readable text (most token-efficient):
+
+```bash
+# Navigate
+curl -s -X POST http://localhost:9868/navigate \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com/article"}'
+sleep 3
+
+# Extract text
+curl -s http://localhost:9868/text
+# Returns: {"text":"...", "title":"...", "url":"..."}
+```
+
+### Scraping a Social Media Feed
+
+For dynamic content that requires scrolling:
+
+```python
+import json, time, urllib.request
+
+BASE = "http://localhost:9868"
+
+def post(path, data):
+    req = urllib.request.Request(f"{BASE}{path}")
+    req.add_header("Content-Type", "application/json")
+    req.method = "POST"
+    req.data = json.dumps(data).encode()
+    with urllib.request.urlopen(req, timeout=15) as r:
+        return json.loads(r.read())
+
+def get_json(path):
+    with urllib.request.urlopen(f"{BASE}{path}", timeout=15) as r:
+        return json.loads(r.read())
+
+# Navigate to feed
+post("/navigate", {"url": "https://x.com/home"})
+time.sleep(5)
+
+# Scroll and collect tweets
+all_tweets = {}
+for i in range(30):
+    result = post("/evaluate", {
+        "expression": """JSON.stringify(Array.from(document.querySelectorAll('article')).map(a => {
+            let timeEl = a.querySelector('time');
+            return {
+                raw: a.innerText.substring(0, 800),
+                datetime: timeEl ? timeEl.getAttribute('datetime') : '',
+                link: timeEl && timeEl.closest('a') ? timeEl.closest('a').href : ''
+            };
+        }))"""
+    })
+    articles = json.loads(result.get("result", "[]"))
+    for a in articles:
+        key = a.get("raw", "")[:150]
+        if key and key not in all_tweets:
+            all_tweets[key] = a
+
+    if len(all_tweets) >= 100:
+        break
+
+    post("/evaluate", {"expression": "window.scrollBy(0, 1500)"})
+    time.sleep(2)
+
+tweets = list(all_tweets.values())
+```
+
+## Taking Screenshots
+
+For visual verification or capturing page state:
+
+```bash
+curl -s http://localhost:9868/screenshot -o /tmp/page.png
+```
+
+## Interacting with Pages
+
+### Getting Interactive Elements
+
+```bash
+# Get compact snapshot of interactive elements
+curl -s "http://localhost:9868/snapshot?filter=interactive&format=compact"
+```
+
+### Clicking Elements
+
+```bash
+# Click element by reference (from snapshot)
+curl -s -X POST http://localhost:9868/action \
+  -H "Content-Type: application/json" \
+  -d '{"actions":[{"kind":"click","ref":"e5"}]}'
+```
+
+### Typing into Fields
+
+```bash
+# Type into an element
+curl -s -X POST http://localhost:9868/action \
+  -H "Content-Type: application/json" \
+  -d '{"actions":[{"kind":"type","ref":"e3","text":"hello world"}]}'
+```
+
+### Scrolling
+
+```bash
+# Scroll down 1500 pixels
+curl -s -X POST http://localhost:9868/evaluate \
+  -H "Content-Type: application/json" \
+  -d '{"expression":"window.scrollBy(0, 1500)"}'
+```
+
+## Managing Profiles
+
+### Listing Profiles
+
+```bash
+curl -s http://localhost:9867/profiles
+```
+
+### Listing Running Instances
+
+```bash
+curl -s http://localhost:9867/instances
+```
+
+### Stopping an Instance
+
+```bash
+curl -s -X POST http://localhost:9867/instances/<id>/stop
+```
+
+### Viewing Instance Logs
+
+```bash
+curl -s http://localhost:9867/instances/<id>/logs
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Always check session validity first">
+    Before starting a long-running scrape, verify the session is still authenticated by navigating to the target page and checking the title doesn't indicate a login screen.
+  </Accordion>
+
+  <Accordion title="Use /text for maximum efficiency">
+    The `/text` endpoint is the most token-efficient way to read pages. It returns only readable content, stripping navigation, ads, and boilerplate.
+  </Accordion>
+
+  <Accordion title="Don't store cookies in plain text">
+    Cookie JSON contains authentication tokens. Import cookies immediately and discard the JSON. They persist in the Chrome profile directory.
+  </Accordion>
+
+  <Accordion title="Use CHROME_BINARY wrapper on servers">
+    Always use `CHROME_BINARY=~/.pinchtab/chrome-wrapper.sh` on servers to ensure Chrome runs with `--no-sandbox` flag.
+  </Accordion>
+
+  <Accordion title="Profile data persists across restarts">
+    PinchTab profiles (including cookies) survive restarts when launched with `nohup`. Sessions typically last weeks to months.
+  </Accordion>
+
+  <Accordion title="Use /evaluate for JavaScript, not /eval">
+    The correct endpoint for executing JavaScript is `/evaluate`, not `/eval`.
+  </Accordion>
+</AccordionGroup>
+
+## Example Workflows
+
+<CardGroup cols={2}>
+  <Card title="Scrape authenticated feed" icon="twitter">
+    1. Ask user for cookies
+    2. Import cookies
+    3. Navigate to feed
+    4. Scroll and extract data with JavaScript
+    5. Compile results
+  </Card>
+  <Card title="Monitor a dashboard" icon="chart-line">
+    1. Import cookies once
+    2. Check session validity
+    3. Navigate to dashboard
+    4. Extract metrics with `/text` or JavaScript
+    5. Return formatted data
+  </Card>
+  <Card title="Read article content" icon="newspaper">
+    1. Navigate to URL
+    2. Use `/text` to get readable content
+    3. Process and return
+  </Card>
+  <Card title="Automated form filling" icon="pen-to-square">
+    1. Get snapshot of interactive elements
+    2. Identify form fields by reference
+    3. Type into fields
+    4. Click submit button
+    5. Verify success
+  </Card>
+</CardGroup>
+
+## Getting Help
+
+The SKILL.md file contains the complete instructions that Claude uses when performing browser automation. It includes:
+
+- Detailed API endpoint documentation
+- Environment variables reference
+- Cookie import workflow
+- Common patterns and examples
+- Critical notes about PinchTab behavior
+
+When requesting browser automation tasks from Claude, you can reference these workflows or simply describe what you need in natural language. Claude will use the skill instructions to execute the appropriate PinchTab commands.

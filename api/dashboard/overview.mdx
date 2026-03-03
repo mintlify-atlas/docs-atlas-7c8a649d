@@ -1,0 +1,84 @@
+---
+title: 'Dashboard API Overview'
+description: 'Manage multiple browser profiles and instances with the PinchTab Dashboard API'
+---
+
+## What is the Dashboard API?
+
+The Dashboard API runs on **port 9867** and provides centralized management for multiple browser profiles and instances. It allows you to:
+
+- List available Chrome profiles
+- Launch browser instances on different ports
+- Monitor running instances
+- Stop instances
+- View instance logs
+
+## When to Use Dashboard API vs Instance API
+
+**Use the Dashboard API (port 9867)** when you need to:
+- Launch new browser profiles
+- Manage multiple simultaneous browser sessions
+- Check which instances are running
+- Stop or monitor instances
+
+**Use the Instance API (port 9868+)** when you need to:
+- Navigate to URLs
+- Read page content
+- Interact with elements (click, type)
+- Take screenshots
+- Execute JavaScript
+- Manage cookies
+
+Think of it this way: the Dashboard API manages the browsers themselves, while the Instance API controls what happens inside each browser.
+
+## Starting the Dashboard
+
+The dashboard must be started before you can use the Dashboard API:
+
+```bash
+# Ensure Xvfb is running (virtual display)
+pgrep Xvfb || (Xvfb :99 -screen 0 1920x1080x24 &>/dev/null &)
+
+# Start PinchTab dashboard
+DISPLAY=:99 \
+CHROME_BINARY=~/.pinchtab/chrome-wrapper.sh \
+CHROME_FLAGS="--no-sandbox --disable-gpu" \
+nohup pinchtab dashboard > /tmp/pinchtab-dash.log 2>&1 &
+```
+
+The dashboard will be available at `http://localhost:9867`.
+
+## Base URL
+
+All Dashboard API endpoints use:
+
+```
+http://localhost:9867
+```
+
+## Available Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/profiles` | GET | List all available browser profiles |
+| `/instances` | GET | List currently running instances |
+| `/instances/launch` | POST | Launch a new browser instance |
+| `/instances/<id>/stop` | POST | Stop a running instance |
+| `/instances/<id>/logs` | GET | View logs for an instance |
+
+## Common Workflow
+
+1. **Check available profiles**: Call `/profiles` to see what profiles exist
+2. **Launch an instance**: Use `/instances/launch` to start a browser on a specific port
+3. **Use the instance**: Make calls to the instance API (e.g., `http://localhost:9868`)
+4. **Monitor or stop**: Use `/instances` to check status, `/instances/<id>/logs` to debug, or `/instances/<id>/stop` to shut down
+
+## Profile Persistence
+
+Browser profiles are stored in `~/.pinchtab/profiles/<name>/`. Each profile maintains:
+- Cookies and sessions
+- Browsing history
+- Cache and local storage
+- Extension data
+
+Once a user logs into a website in a profile, that session persists across instance restarts.

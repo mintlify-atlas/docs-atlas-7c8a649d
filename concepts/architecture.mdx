@@ -1,0 +1,236 @@
+---
+title: Architecture
+description: Understanding PinchTab's architecture and how the components work together
+---
+
+PinchTab is a lightweight browser automation toolkit that wraps Chrome's DevTools Protocol into a simple HTTP API. This page explains how the components work together to enable AI agents to automate web browsing.
+
+## System Components
+
+PinchTab consists of four main components that work together:
+
+<CardGroup cols={2}>
+  <Card title="PinchTab Binary" icon="cube">
+    A 12MB Go binary located at `/usr/local/bin/pinchtab` that wraps the Chrome DevTools Protocol into an HTTP API
+  </Card>
+  <Card title="Google Chrome" icon="chrome">
+    The actual browser (`/usr/bin/google-chrome-stable`) installed via apt package manager
+  </Card>
+  <Card title="Xvfb" icon="display">
+    Virtual display server that enables headed mode on headless servers
+  </Card>
+  <Card title="Chrome Wrapper" icon="file-code">
+    A shell script (`~/.pinchtab/chrome-wrapper.sh`) that adds `--no-sandbox` flag for server environments
+  </Card>
+</CardGroup>
+
+## Architecture Overview
+
+PinchTab runs Chrome with persistent profiles, allowing user sessions to persist across restarts. Once a user logs into a site, the session remains active until the cookies expire (typically weeks to months).
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        HTTP API                              │
+│                  (localhost:9868, 9869...)                   │
+└────────────────────────┬────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│                   PinchTab Binary                            │
+│              (Chrome DevTools Protocol)                      │
+└────────────────────────┬────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│                  Chrome Wrapper Script                       │
+│              (~/.pinchtab/chrome-wrapper.sh)                 │
+└────────────────────────┬────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Google Chrome                             │
+│              (/usr/bin/google-chrome-stable)                 │
+└────────────────────────┬────────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────────┐
+│                        Xvfb                                  │
+│                  (Virtual Display :99)                       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+## Component Details
+
+### PinchTab Binary
+
+The PinchTab binary is a lightweight (12MB) Go application that:
+
+- Exposes a simple HTTP API for browser control
+- Communicates with Chrome via the Chrome DevTools Protocol (CDP)
+- Manages Chrome instances and profiles
+- Provides token-efficient data extraction (you get exactly what you ask for)
+- Handles multiple browser profiles through dashboard mode
+
+<Note>
+The PinchTab binary is installed to `/usr/local/bin/pinchtab` and can be downloaded from [pinchtab.com](https://pinchtab.com).
+</Note>
+
+### Google Chrome
+
+Google Chrome is the actual browser engine that:
+
+- Renders web pages
+- Executes JavaScript
+- Stores cookies and session data in profile directories
+- Provides the DevTools Protocol interface for automation
+
+**Installation:**
+
+```bash
+wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+sudo apt-get update && sudo apt-get install -y google-chrome-stable
+```
+
+### Xvfb (Virtual Display)
+
+Xvfb (X Virtual Framebuffer) provides a virtual display for running Chrome in headed mode on headless servers:
+
+- Creates a virtual X11 display (typically `:99`)
+- Enables headed Chrome features without a physical monitor
+- Required for certain browser features that don't work in headless mode
+- Runs with a configured resolution (e.g., 1920x1080x24)
+
+**Starting Xvfb:**
+
+```bash
+pgrep Xvfb || (Xvfb :99 -screen 0 1920x1080x24 &>/dev/null &)
+```
+
+### Chrome Wrapper Script
+
+The Chrome wrapper is a shell script that adds necessary flags for server environments:
+
+```bash chrome-wrapper.sh
+#!/bin/bash
+exec /usr/bin/google-chrome-stable --no-sandbox "$@"
+```
+
+<Warning>
+Always use `CHROME_BINARY=~/.pinchtab/chrome-wrapper.sh` on servers. Chrome needs the `--no-sandbox` flag to run in containerized or restricted environments.
+</Warning>
+
+**Creating the wrapper:**
+
+```bash
+mkdir -p ~/.pinchtab
+cat > ~/.pinchtab/chrome-wrapper.sh << 'EOF'
+#!/bin/bash
+exec /usr/bin/google-chrome-stable --no-sandbox "$@"
+EOF
+chmod +x ~/.pinchtab/chrome-wrapper.sh
+```
+
+## Operating Modes
+
+PinchTab can run in two different modes:
+
+### Dashboard Mode (Recommended)
+
+Manages multiple Chrome profiles, each running on its own port:
+
+- Dashboard runs on port `9867`
+- Each profile instance runs on a separate port (9868, 9869, etc.)
+- Profiles can be launched, stopped, and monitored via dashboard API
+- Ideal for managing multiple user sessions or websites
+
+**Starting dashboard:**
+
+```bash
+DISPLAY=:99 \
+CHROME_BINARY=~/.pinchtab/chrome-wrapper.sh \
+CHROME_FLAGS="--no-sandbox --disable-gpu" \
+nohup pinchtab dashboard > /tmp/pinchtab-dash.log 2>&1 &
+```
+
+### Single Profile Mode
+
+Runs a single Chrome profile without the dashboard:
+
+- Simpler setup for single-purpose automation
+- Direct port configuration via environment variables
+- No dashboard overhead
+
+**Starting single profile:**
+
+```bash
+DISPLAY=:99 \
+CHROME_BINARY=~/.pinchtab/chrome-wrapper.sh \
+BRIDGE_PORT=9868 \
+BRIDGE_PROFILE=~/.pinchtab/profiles/default \
+BRIDGE_HEADLESS=false \
+BRIDGE_NO_RESTORE=true \
+nohup pinchtab > /tmp/pinchtab.log 2>&1 &
+```
+
+## Data Flow
+
+Here's how a typical API request flows through the architecture:
+
+<Steps>
+  <Step title="HTTP Request">
+    Your application sends an HTTP request to PinchTab (e.g., `POST http://localhost:9868/navigate`)
+  </Step>
+  
+  <Step title="PinchTab Processing">
+    The PinchTab binary receives the request and translates it into Chrome DevTools Protocol commands
+  </Step>
+  
+  <Step title="Chrome Execution">
+    Chrome (launched via the wrapper script) executes the command through CDP
+  </Step>
+  
+  <Step title="Response">
+    Results are sent back through PinchTab's HTTP API in a token-efficient format
+  </Step>
+</Steps>
+
+## Token Efficiency
+
+PinchTab is designed to be token-efficient for AI agents:
+
+- **`/text` endpoint**: Returns only readable text content (most efficient)
+- **`/snapshot` endpoint**: Returns structured element data with optional filtering
+- **`/screenshot` endpoint**: Returns binary image data
+- **No automatic data**: You only get what you explicitly request
+
+<Info>
+The `/text` endpoint is the most token-efficient way to read pages. Use it by default unless you need interactive elements or visual data.
+</Info>
+
+## Persistence
+
+PinchTab maintains persistence across restarts:
+
+- **Profiles**: Stored in `~/.pinchtab/profiles/<name>/`
+- **Cookies**: Persisted within profile directories
+- **Sessions**: Remain active until cookies expire
+- **Process**: Survives restarts when launched with `nohup`
+
+## Environment Variables
+
+Key environment variables for configuring PinchTab:
+
+| Variable | Description | Default |
+|----------|-------------|----------|
+| `CHROME_BINARY` | Path to Chrome or wrapper script | auto-detect |
+| `CHROME_FLAGS` | Extra Chrome flags | — |
+| `DISPLAY` | X11 display number | — |
+| `BRIDGE_PORT` | PinchTab API port | 9867 |
+| `BRIDGE_PROFILE` | Chrome profile directory | — |
+| `BRIDGE_HEADLESS` | Run Chrome headless | true |
+| `BRIDGE_NO_RESTORE` | Don't restore previous tabs | false |
+
+<Check>
+For a complete list of environment variables, see the [Environment Variables](/guides/environment-variables) guide.
+</Check>

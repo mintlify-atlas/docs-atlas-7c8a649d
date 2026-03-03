@@ -1,0 +1,82 @@
+---
+title: Introduction
+description: Browser automation toolkit for AI agents via PinchTab HTTP API with cookie-based auth and scraping patterns
+---
+
+# PinchTab — Browser automation for AI agents
+
+PinchTab Skill is a comprehensive guide and toolkit for AI agents to automate web browsing via [PinchTab](https://pinchtab.com) — a lightweight HTTP API that controls Chrome.
+
+<Note>
+**Token-efficient**: You get exactly the data you ask for, nothing more. Use `/text` to extract readable content without bloated HTML, or `/snapshot` to get an interactive element map in compact JSON.
+</Note>
+
+## What is PinchTab?
+
+PinchTab is a 12MB Go binary that wraps the Chrome DevTools Protocol into a simple HTTP API. It runs Chrome with persistent profiles, enabling:
+
+- **Cookie-based authentication** — No screen sharing or VNC needed. Users export cookies from their browser using the Cookie-Editor extension, and sessions persist across restarts.
+- **Token-efficient scraping** — Extract exactly what you need: readable text, element snapshots, or screenshots.
+- **Multiple profiles** — Run multiple browser instances simultaneously, each with its own authentication state.
+- **Headed mode on servers** — Uses Xvfb for visual browser automation without a physical display.
+
+Originally built as an [AI agent skill](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code/tutorials#add-custom-slash-commands) for Claude Code, but the API docs, patterns, and scripts are useful for any AI agent framework.
+
+## Key features
+
+<CardGroup cols={2}>
+  <Card title="HTTP API for Chrome" icon="browser" href="/api/overview">
+    Control Chrome via simple HTTP endpoints — navigate, click, type, scroll, and extract data
+  </Card>
+  <Card title="Cookie-based auth" icon="cookie" href="/concepts/authentication">
+    No VNC or screen sharing. Import cookies from Cookie-Editor extension for persistent sessions
+  </Card>
+  <Card title="Token efficiency" icon="gauge-high" href="/api/reading-content">
+    Extract readable text or compact element snapshots — only the data you need
+  </Card>
+  <Card title="Multiple profiles" icon="users" href="/concepts/profiles">
+    Run multiple browser instances with separate authentication states via dashboard mode
+  </Card>
+  <Card title="Dashboard API" icon="chart-mixed" href="/api/dashboard/overview">
+    Manage multiple browser profiles, launch instances, and view logs via HTTP
+  </Card>
+  <Card title="Helper scripts" icon="terminal" href="/scripts/overview">
+    TypeScript CLI tools and bash scripts for common automation workflows
+  </Card>
+</CardGroup>
+
+## How it works
+
+1. **Install PinchTab** — Download the binary and set up Chrome with Xvfb
+2. **Start the dashboard** — Launch PinchTab in dashboard mode to manage multiple profiles
+3. **Import cookies** — Users export cookies from their browser and send them to your agent
+4. **Automate browsing** — Use the HTTP API to navigate, extract data, and interact with pages
+
+<Info>
+PinchTab runs Chrome with persistent profiles stored in `~/.pinchtab/profiles/`. Once a user logs into a site, the session persists across restarts — no need to re-authenticate unless the session expires (typically weeks to months).
+</Info>
+
+## Use cases
+
+- **Social media scraping** — Extract posts, tweets, or feed data from authenticated accounts
+- **Dashboard monitoring** — Read metrics and data from authenticated web dashboards
+- **Content extraction** — Pull articles, documentation, or data from paywalled sites
+- **Form automation** — Fill out forms, submit data, and navigate multi-step workflows
+- **Screenshot capture** — Take screenshots of pages for visual verification or archiving
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get up and running with a working example in minutes
+  </Card>
+  <Card title="Installation" icon="download" href="/installation">
+    Install PinchTab, Chrome, and dependencies on your server
+  </Card>
+  <Card title="Architecture" icon="diagram-project" href="/concepts/architecture">
+    Understand how PinchTab works under the hood
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Explore the complete HTTP API documentation
+  </Card>
+</CardGroup>

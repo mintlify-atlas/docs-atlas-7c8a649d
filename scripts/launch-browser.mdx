@@ -1,0 +1,252 @@
+---
+title: launch-browser.sh
+description: Launch complete VNC-based browser automation stack
+---
+
+## Overview
+
+The `launch-browser.sh` script launches a complete browser automation stack with visual access via VNC. It orchestrates multiple components to provide a remotely accessible browser session.
+
+## What It Does
+
+The script starts five interconnected services:
+
+<Steps>
+  <Step title="Xvfb - Virtual Display">
+    Creates a virtual X11 display (`:99`) at 1280x1024 resolution
+  </Step>
+  <Step title="Chromium with CDP">
+    Launches Playwright's Chromium with Chrome DevTools Protocol on port 9222
+  </Step>
+  <Step title="x11vnc - VNC Server">
+    Starts VNC server on port 5900 to share the virtual display
+  </Step>
+  <Step title="websockify/noVNC">
+    Runs web-based VNC client on port 6080 for browser access
+  </Step>
+  <Step title="cloudflared Tunnel">
+    Creates public HTTPS tunnel for remote access
+  </Step>
+</Steps>
+
+## Usage
+
+### Basic Usage
+
+```bash
+bash scripts/launch-browser.sh
+```
+
+Launches browser with `about:blank` as the initial page.
+
+### With Target URL
+
+```bash
+bash scripts/launch-browser.sh https://example.com
+```
+
+Launches browser and navigates to the specified URL.
+
+## Output
+
+The script outputs JSON with connection details to stdout:
+
+```json
+{
+  "novnc_url": "https://abc123.trycloudflare.com/vnc.html?autoconnect=true&resize=remote",
+  "tunnel_url": "https://abc123.trycloudflare.com",
+  "cdp_url": "http://127.0.0.1:9222",
+  "display": ":99",
+  "target_url": "https://example.com",
+  "pids": {
+    "xvfb": 12345,
+    "chrome": 12346,
+    "x11vnc": 12347,
+    "websockify": 12348,
+    "cloudflared": 12349
+  }
+}
+```
+
+### Output Fields
+
+| Field | Description |
+|-------|-------------|
+| `novnc_url` | Direct link to web VNC client (auto-connect enabled) |
+| `tunnel_url` | Base cloudflared tunnel URL |
+| `cdp_url` | Chrome DevTools Protocol endpoint (local only) |
+| `display` | X11 display identifier |
+| `target_url` | Initial URL loaded in browser |
+| `pids` | Process IDs for all services |
+
+<Tip>
+Open the `novnc_url` in your browser to see and interact with the automated browser visually.
+</Tip>
+
+## Configuration
+
+The script uses these default ports and settings:
+
+```bash
+DISPLAY_NUM=99
+SCREEN_RES="1280x1024x24"
+VNC_PORT=5900
+NOVNC_PORT=6080
+CDP_PORT=9222
+PID_DIR="/tmp/browser-automation"
+LOG_DIR="/tmp/browser-automation/logs"
+```
+
+To customize, edit the script directly (source: `scripts/launch-browser.sh:9`).
+
+## Process Management
+
+### PID Files
+
+Process IDs are stored in `/tmp/browser-automation/`:
+
+- `xvfb.pid`
+- `chrome.pid`
+- `x11vnc.pid`
+- `websockify.pid`
+- `cloudflared.pid`
+
+### Log Files
+
+Logs are written to `/tmp/browser-automation/logs/`:
+
+- `xvfb.log`
+- `chrome.log`
+- `x11vnc.log`
+- `websockify.log`
+- `cloudflared.log`
+
+### Stopping Services
+
+The script automatically calls `stop-browser.sh` before starting to clean up any stale sessions.
+
+To manually stop all services:
+
+```bash
+bash scripts/stop-browser.sh
+```
+
+## Chrome Flags
+
+Chromium is launched with these flags (source: `scripts/launch-browser.sh:53`):
+
+```bash
+--no-first-run
+--no-default-browser-check
+--disable-background-timer-throttling
+--disable-backgrounding-occluded-windows
+--disable-renderer-backgrounding
+--disable-dev-shm-usage
+--no-sandbox
+--remote-debugging-port=9222
+--remote-debugging-address=127.0.0.1
+--window-size=1280,1024
+--start-maximized
+--user-data-dir=/tmp/browser-automation/chrome-profile
+```
+
+<Warning>
+`--no-sandbox` is required for running Chrome in containerized or headless environments. Only use in trusted environments.
+</Warning>
+
+## Example Workflow
+
+```bash
+# Launch browser with Twitter
+OUTPUT=$(bash scripts/launch-browser.sh https://twitter.com)
+
+# Extract noVNC URL
+NOVNC_URL=$(echo "$OUTPUT" | jq -r '.novnc_url')
+echo "Open in browser: $NOVNC_URL"
+
+# Extract CDP URL for automation
+CDP_URL=$(echo "$OUTPUT" | jq -r '.cdp_url')
+export CDP_URL
+
+# Now use browser-connect.ts to interact
+bun run scripts/browser-connect.ts status
+bun run scripts/browser-connect.ts screenshot
+```
+
+## Error Handling
+
+The script includes robust error handling:
+
+- **Xvfb fails** - Script exits, logs shown
+- **Chromium fails** - Stack cleaned up, script exits
+- **CDP not reachable** - Retries for 7.5 seconds, then fails
+- **x11vnc fails** - Stack cleaned up, script exits
+- **noVNC not responding** - Retries for 5 seconds, then fails
+- **Cloudflared tunnel timeout** - Fails after 30 seconds
+
+<Info>
+All diagnostic output is sent to stderr. Only the final JSON goes to stdout.
+</Info>
+
+## Prerequisites
+
+Before running, ensure:
+
+1. All dependencies installed via [install-deps.sh](/scripts/install-deps)
+2. Playwright Chromium available at `~/.cache/ms-playwright/`
+3. Cloudflared installed and in PATH
+4. Ports 5900, 6080, 9222 available
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="ERROR: Playwright Chromium not found">
+    Install Playwright Chromium:
+    
+    ```bash
+    bunx playwright install chromium
+    bunx playwright install-deps chromium
+    ```
+  </Accordion>
+  
+  <Accordion title="ERROR: CDP endpoint not reachable">
+    Check if port 9222 is already in use:
+    
+    ```bash
+    lsof -i :9222
+    # Kill existing process if needed
+    kill <pid>
+    ```
+  </Accordion>
+  
+  <Accordion title="ERROR: Could not get cloudflared tunnel URL">
+    Check cloudflared logs:
+    
+    ```bash
+    cat /tmp/browser-automation/logs/cloudflared.log
+    ```
+    
+    Ensure cloudflared is installed and network is accessible.
+  </Accordion>
+  
+  <Accordion title="noVNC shows black screen">
+    Check if Xvfb and x11vnc are running:
+    
+    ```bash
+    ps aux | grep Xvfb
+    ps aux | grep x11vnc
+    cat /tmp/browser-automation/logs/xvfb.log
+    cat /tmp/browser-automation/logs/x11vnc.log
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+- [Interact with the browser](/scripts/browser-connect) using `browser-connect.ts`
+- Use the CDP endpoint with any CDP-compatible library
+- Open the noVNC URL for visual debugging
+
+## Source Code
+
+Location: `scripts/launch-browser.sh:1`

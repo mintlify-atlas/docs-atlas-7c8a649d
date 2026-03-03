@@ -1,0 +1,309 @@
+---
+title: Environment Variables
+description: Complete reference for configuring PinchTab via environment variables
+---
+
+PinchTab is configured entirely through environment variables. This allows flexible deployment without config files.
+
+## Quick Reference
+
+| Variable | Description | Default |
+|----------|-------------|---------||
+| `CHROME_BINARY` | Path to Chrome or wrapper script | auto-detect |
+| `CHROME_FLAGS` | Extra Chrome flags | — |
+| `BRIDGE_PORT` | PinchTab API port | 9867 |
+| `BRIDGE_PROFILE` | Chrome profile directory | — |
+| `BRIDGE_HEADLESS` | Run Chrome headless | true |
+| `BRIDGE_TOKEN` | Auth token for PinchTab API | — (disabled) |
+| `BRIDGE_STEALTH` | Fingerprint stealth level | light |
+| `BRIDGE_NO_RESTORE` | Don't restore previous tabs | false |
+| `BRIDGE_NO_DASHBOARD` | Run without dashboard | false |
+| `BRIDGE_BLOCK_MEDIA` | Block media loading | false |
+| `BRIDGE_BLOCK_IMAGES` | Block image loading | false |
+| `BRIDGE_NAV_TIMEOUT` | Navigation timeout | 30s |
+| `BRIDGE_MAX_TABS` | Max concurrent tabs | — |
+| `BRIDGE_TIMEZONE` | Override timezone | — |
+| `BRIDGE_USER_AGENT` | Override user agent | — |
+
+## Chrome Configuration
+
+### CHROME_BINARY
+
+Path to the Chrome executable or wrapper script.
+
+```bash
+CHROME_BINARY=~/.pinchtab/chrome-wrapper.sh
+```
+
+<Warning>
+**Always use a wrapper script on servers** that adds `--no-sandbox`. Chrome requires this flag in containerized or non-root environments.
+</Warning>
+
+Create the wrapper:
+
+```bash
+mkdir -p ~/.pinchtab
+cat > ~/.pinchtab/chrome-wrapper.sh << 'EOF'
+#!/bin/bash
+exec /usr/bin/google-chrome-stable --no-sandbox "$@"
+EOF
+chmod +x ~/.pinchtab/chrome-wrapper.sh
+```
+
+### CHROME_FLAGS
+
+Additional flags passed to Chrome.
+
+```bash
+CHROME_FLAGS="--no-sandbox --disable-gpu"
+```
+
+Common flags:
+- `--no-sandbox` — Required for servers (see `CHROME_BINARY`)
+- `--disable-gpu` — Disable GPU hardware acceleration
+- `--disable-dev-shm-usage` — Use `/tmp` instead of `/dev/shm` (useful in containers)
+- `--window-size=1920,1080` — Set window size
+
+## Network Configuration
+
+### BRIDGE_PORT
+
+Port for the PinchTab API server.
+
+```bash
+BRIDGE_PORT=9868
+```
+
+- Dashboard mode: Default is `9867` for the dashboard; instances use `9868`, `9869`, etc.
+- Single profile mode: Default is `9867`
+
+## Profile Management
+
+### BRIDGE_PROFILE
+
+Path to the Chrome profile directory where cookies, cache, and settings are stored.
+
+```bash
+BRIDGE_PROFILE=~/.pinchtab/profiles/default
+```
+
+Profiles persist:
+- Cookies (authentication sessions)
+- Browser history
+- Cache
+- Extensions
+- Settings
+
+<Tip>
+Use separate profiles for different users or tasks to keep sessions isolated.
+</Tip>
+
+### BRIDGE_NO_RESTORE
+
+Don't restore tabs from the previous session.
+
+```bash
+BRIDGE_NO_RESTORE=true
+```
+
+Useful when starting fresh or avoiding clutter from previous sessions.
+
+## Display Configuration
+
+### BRIDGE_HEADLESS
+
+Run Chrome in headless mode (no visible window).
+
+```bash
+BRIDGE_HEADLESS=true
+```
+
+- `true`: No UI, faster startup, lower resource usage
+- `false`: Visible browser window (requires a display like Xvfb)
+
+<Note>
+On headless servers, set `BRIDGE_HEADLESS=false` and use Xvfb to provide a virtual display. This is required for some websites that detect and block headless browsers.
+</Note>
+
+### DISPLAY
+
+X11 display for the Chrome window (when `BRIDGE_HEADLESS=false`).
+
+```bash
+DISPLAY=:99
+```
+
+Ensure Xvfb is running on that display:
+
+```bash
+Xvfb :99 -screen 0 1920x1080x24 &>/dev/null &
+```
+
+## Performance Optimization
+
+### BRIDGE_BLOCK_MEDIA
+
+Block all media (audio/video) loading.
+
+```bash
+BRIDGE_BLOCK_MEDIA=true
+```
+
+Speeds up page loads when you only need text or interactive elements.
+
+### BRIDGE_BLOCK_IMAGES
+
+Block image loading.
+
+```bash
+BRIDGE_BLOCK_IMAGES=true
+```
+
+Reduces bandwidth and speeds up navigation. Useful for text-only scraping.
+
+### BRIDGE_NAV_TIMEOUT
+
+Timeout for navigation requests.
+
+```bash
+BRIDGE_NAV_TIMEOUT=60s
+```
+
+Increase for slow-loading pages. Format: `30s`, `2m`, etc.
+
+### BRIDGE_MAX_TABS
+
+Maximum number of concurrent tabs.
+
+```bash
+BRIDGE_MAX_TABS=10
+```
+
+Prevents runaway tab creation. Useful when automating tasks that open many tabs.
+
+## Security & Stealth
+
+### BRIDGE_TOKEN
+
+API authentication token.
+
+```bash
+BRIDGE_TOKEN=your-secret-token
+```
+
+When set, all API requests must include the header:
+
+```bash
+Authorization: Bearer your-secret-token
+```
+
+<Warning>
+Don't expose PinchTab on public networks without setting `BRIDGE_TOKEN`.
+</Warning>
+
+### BRIDGE_STEALTH
+
+Fingerprint stealth level.
+
+```bash
+BRIDGE_STEALTH=light
+```
+
+Options:
+- `light` (default): Basic anti-detection measures
+- `medium`: More aggressive fingerprint randomization
+- `high`: Maximum stealth (may break some sites)
+
+## Browser Behavior
+
+### BRIDGE_TIMEZONE
+
+Override the browser timezone.
+
+```bash
+BRIDGE_TIMEZONE=America/New_York
+```
+
+Useful for location-specific content or testing.
+
+### BRIDGE_USER_AGENT
+
+Override the browser user agent string.
+
+```bash
+BRIDGE_USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+```
+
+Mimic specific browsers or devices.
+
+## Dashboard Mode
+
+### BRIDGE_NO_DASHBOARD
+
+Run in single-profile mode without the dashboard.
+
+```bash
+BRIDGE_NO_DASHBOARD=true
+```
+
+- `false` (default): Start dashboard on port 9867
+- `true`: Skip dashboard, run a single profile on `BRIDGE_PORT`
+
+## Example Configurations
+
+### Minimal Setup (Dashboard Mode)
+
+```bash
+DISPLAY=:99 \
+CHROME_BINARY=~/.pinchtab/chrome-wrapper.sh \
+CHROME_FLAGS="--no-sandbox --disable-gpu" \
+pinchtab dashboard
+```
+
+### Single Profile for Scraping
+
+```bash
+DISPLAY=:99 \
+CHROME_BINARY=~/.pinchtab/chrome-wrapper.sh \
+BRIDGE_PORT=9868 \
+BRIDGE_PROFILE=~/.pinchtab/profiles/scraper \
+BRIDGE_HEADLESS=false \
+BRIDGE_NO_RESTORE=true \
+BRIDGE_BLOCK_IMAGES=true \
+pinchtab
+```
+
+### High-Performance Headless
+
+```bash
+CHROME_BINARY=~/.pinchtab/chrome-wrapper.sh \
+BRIDGE_PORT=9868 \
+BRIDGE_HEADLESS=true \
+BRIDGE_BLOCK_MEDIA=true \
+BRIDGE_BLOCK_IMAGES=true \
+BRIDGE_NAV_TIMEOUT=15s \
+pinchtab
+```
+
+### Secure Production Setup
+
+```bash
+DISPLAY=:99 \
+CHROME_BINARY=~/.pinchtab/chrome-wrapper.sh \
+BRIDGE_PORT=9868 \
+BRIDGE_TOKEN=your-secret-token \
+BRIDGE_STEALTH=medium \
+BRIDGE_PROFILE=~/.pinchtab/profiles/production \
+pinchtab
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Launch your first PinchTab instance
+  </Card>
+  <Card title="Common Patterns" icon="book" href="/guides/common-patterns">
+    Learn practical automation workflows
+  </Card>
+</CardGroup>
