@@ -1,0 +1,107 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "PinchTab Skill",
+  "projectDescription": "Browser automation toolkit for AI agents via PinchTab HTTP API with cookie-based auth and scraping patterns",
+  "theme": "palm",
+  "primaryColor": "#2563eb",
+  "lightColor": null,
+  "darkColor": null,
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/architecture",
+              "concepts/authentication",
+              "concepts/profiles"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/common-patterns",
+              "guides/scraping-feeds",
+              "guides/session-validation",
+              "guides/screenshots",
+              "guides/environment-variables"
+            ]
+          },
+          {
+            "group": "Scripts",
+            "pages": [
+              "scripts/overview",
+              "scripts/install-deps",
+              "scripts/launch-browser",
+              "scripts/browser-connect"
+            ]
+          },
+          {
+            "group": "Claude Code",
+            "pages": [
+              "claude/integration",
+              "claude/workflows"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "PinchTab API",
+            "pages": [
+              "api/overview",
+              "api/navigation",
+              "api/reading-content",
+              "api/interaction",
+              "api/cookies",
+              "api/health"
+            ]
+          },
+          {
+            "group": "Dashboard API",
+            "pages": [
+              "api/dashboard/overview",
+              "api/dashboard/profiles",
+              "api/dashboard/instances"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "HTTP API for Chrome automation via PinchTab",
+    "Cookie-based authentication (no VNC/screen sharing needed)",
+    "Persistent Chrome profiles with session management",
+    "Token-efficient content extraction",
+    "Dashboard mode for multiple browser profiles",
+    "TypeScript CDP integration tools",
+    "Claude Code skill integration"
+  ],
+  "publicApiSurface": [
+    "/text - Get readable page text",
+    "/snapshot - Get element snapshot",
+    "/navigate - Navigate to URL",
+    "/action - Interact with elements",
+    "/evaluate - Execute JavaScript",
+    "/cookies - Manage cookies",
+    "/screenshot - Capture screenshots",
+    "/health - Check instance status",
+    "Dashboard: /profiles - List profiles",
+    "Dashboard: /instances - Manage instances",
+    "Dashboard: /instances/launch - Launch profile",
+    "browser-connect.ts - CDP CLI tool"
+  ]
+}
